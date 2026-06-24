@@ -38,6 +38,6 @@ done
 
 echo
 echo "A growing *.mp3.tmp means the receive -> demod -> record chain works."
-echo "This host has no audio out, so to LISTEN, copy it to your laptop (a partial"
-echo ".tmp is a valid MP3 and plays fine) and open it in any player:"
-echo "  scp '$USER@<this-host-ip>:$PWD/${newest##*/}' ."
+echo "This host has no speaker. To LISTEN, copy the file to your laptop (a partial"
+echo ".tmp is a valid MP3 and plays fine). FROM YOUR LAPTOP'S terminal, run:"
+echo "  scp '$USER@<host-lan-ip>:$PWD/${newest#./}' ."
