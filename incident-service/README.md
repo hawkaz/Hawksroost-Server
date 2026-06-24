@@ -1,8 +1,12 @@
-# Incident-detection service — Step 4 (placeholder)
+# Control service — Step 4 (placeholder)
 
-The custom orchestration layer (the part that doesn't exist off the shelf). It
-watches recording activity/metadata and applies **configurable rules** to flag
-fire/dispatch incidents, extend recording, and alert you.
+The custom orchestration layer (the part that doesn't exist off the shelf).
+Originally "incident detection," its scope now also covers retention and the
+Keep workflow — see the full spec in **[../docs/features.md](../docs/features.md)**.
+It owns: incident detection + alerts + cooldown (R5), the NVR-style **size-based
+rotation** + **protect/Keep page** (R4), and later the curated **frequency
+admin** (R1). It watches recording activity/metadata and applies **configurable
+rules** to flag fire/dispatch incidents, extend recording, and alert you.
 
 **Added in Step 4** (after recording + UI + compose are proven). Planned shape:
 

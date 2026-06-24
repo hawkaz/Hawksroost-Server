@@ -34,9 +34,14 @@ We build and verify **incrementally**, confirming each stage before the next:
 - [ ] Step 4 — Incident detection: rules + alerts + cooldown recording.
 - [ ] Step 5 — Tailscale remote access + multi-user auth + storage retention.
 
-This commit delivers **Step 1 only**: `docker-compose.yml` (recorder service)
-and a templated `rtl_airband.conf`. Everything else is scaffolded with clear
-"added in Step N" markers so the shape is visible without half-built code.
+Step 1 delivers `docker-compose.yml` (recorder service) and a templated
+`rtl_airband.conf`. Everything else is scaffolded with clear "added in Step N"
+markers so the shape is visible without half-built code.
+
+> **Feature spec:** the agreed behavior for recording, listening, NVR-style
+> retention/Keep, and incidents is written up in
+> **[docs/features.md](docs/features.md)** — the source of truth for what we're
+> building and where each piece lives.
 
 ---
 
