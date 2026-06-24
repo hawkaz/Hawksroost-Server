@@ -1,0 +1,55 @@
+###############################################################################
+# Hawksroost Server — Docker Compose
+#
+# STEP 1: only the RTLSDR-Airband recorder is active. rdio-scanner (Step 2)
+# and the incident-detection service (Step 4) are added to THIS file later.
+#
+# Run on the cabin host (HAWKSROOST):
+#   1) ./scripts/preflight.sh            # check dongle, blacklist, contention
+#   2) docker stop owrx                  # FREE THE SDR — OpenWebRX holds it now!
+#   3) cp .env.example .env              # then edit if you like
+#   4) docker compose up -d rtlsdr-airband
+#   5) docker compose logs -f rtlsdr-airband
+#   6) ./scripts/verify-recording.sh     # confirm .mp3 files are landing
+#
+# NOTE: one dongle can serve only ONE program at a time. While this recorder
+#       runs, OpenWebRX cannot use the same dongle (and vice-versa). Running
+#       both at once needs a 2nd dongle (and ideally a multicoupler).
+###############################################################################
+
+services:
+  rtlsdr-airband:
+    # Official image; two-stage build bundles the RTL-SDR Blog V4 librtlsdr
+    # fork so the v4 tunes correctly in-container.
+    # If this path ever 404s, try: ghcr.io/rtl-airband/rtlsdr-airband:latest
+    # Reproducibility: once a version works, pin it instead of :latest
+    # (see README "Pinning & Watchtower").
+    image: ghcr.io/charlie-foxtrot/rtlsdr-airband:latest
+    container_name: hawksroost-airband
+    restart: unless-stopped
+
+    # --- RTL-SDR USB passthrough -------------------------------------------
+    # major 189 = USB character devices. The cgroup rule grants access; the
+    # /dev/bus/usb bind-mount lets the container (re)open the dongle even after
+    # a replug / re-enumeration (more robust than pinning a static device node).
+    device_cgroup_rules:
+      - 'c 189:* rwm'
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - ./rtlsdr-airband/rtl_airband.conf:/app/rtl_airband.conf:ro
+      - ./recordings:/recordings
+
+    environment:
+      - TZ=${TZ:-America/Phoenix}     # Arizona = no DST. Drives filename timestamps.
+
+    # Keep Watchtower (already running on this host) from surprise-updating the
+    # SDR stack. Delete this label if you WANT auto-updates.
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+    # No ports: file output only (no Icecast/web stream from airband).
+    # Logs -> `docker compose logs -f rtlsdr-airband`.
+
+# Recordings land in ./recordings (bind mount) so you can ls/play them during
+# Step 1, and so the incident service + rdio-scanner can share them later.
+# (We can switch to a named volume once the stack is settled — see README.)

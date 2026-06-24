@@ -1,0 +1,21 @@
+# Recordings — audio piles up fast; never commit it
+/recordings/*
+!/recordings/.gitkeep
+
+# Local env / secrets
+.env
+*.local
+*.secret
+
+# rdio-scanner data (Step 2)
+/rdio-scanner/data/
+
+# Python (incident service, Step 4)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / OS cruft
+.DS_Store
+*.swp

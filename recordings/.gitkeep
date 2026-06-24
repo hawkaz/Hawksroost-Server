@@ -1,0 +1,3 @@
+# Recordings land here (bind-mounted into the rtlsdr-airband container as
+# /recordings). The audio itself is gitignored; this file just keeps the
+# directory in git.
