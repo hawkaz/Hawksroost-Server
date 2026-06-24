@@ -32,15 +32,24 @@ ls -lh recordings/
 
 ## What success looks like
 
-- **Logs** show the device opening and tuning, e.g. a line naming the RTL
-  device and `162.4` / the NOAA channel, with no repeating fatal errors.
-- **A file appears:** `recordings/NOAA_162.400_YYYYMMDD_HHMMSS.mp3`, and it
-  **grows** over time (NOAA is a 24/7 carrier, so it records continuously and
-  rotates hourly — a steadily growing file is exactly right).
-- **It plays** and you hear the NWS weather broadcast (the computerized NWS voice):
+- **Logs** show the device opening and tuning — e.g. `Found Rafael Micro R828D
+  tuner`, `RTL-SDR Blog V4 Detected`, `RTLSDR device 0 initialized`, then
+  `Writing to /recordings/NOAA_162.400_…` — with no repeating fatal errors.
+- **A file appears and grows:** while recording, the in-progress file is named
+  **`NOAA_162.400_YYYYMMDD_HH.mp3.tmp`** (note the `.tmp`). RTLSDR-Airband
+  renames it to the final **`.mp3`** only when the file closes — at the **top of
+  the hour** for NOAA's continuous carrier (or per-transmission on squelch-gated
+  channels). A steadily growing `.tmp` is exactly right. (This `.tmp` → `.mp3`
+  rename is also what lets Step 2's dirwatch avoid ingesting half-written files.)
+- **It plays** and you hear the NWS weather broadcast (the computerized voice).
+  This host has no audio out and no `ffplay`, so copy it to a machine that does
+  — a partial `.tmp` is a valid MP3 and plays fine:
 
   ```bash
-  ffplay recordings/NOAA_162.400_*.mp3      # or copy off-host into any player
+  # from your laptop, on the same LAN:
+  scp 'chris@<host-ip>:~/hawksroost-server/recordings/NOAA_162.400_*.mp3.tmp' .
+  # (optional) analyze on the host instead: sudo apt install -y ffmpeg
+  #   ffprobe recordings/NOAA_162.400_*.mp3.tmp        # shows a valid audio stream
   ```
 
 > Filenames use **local time** (`localtime = true` + `TZ=America/Phoenix`).

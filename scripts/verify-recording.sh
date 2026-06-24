@@ -4,26 +4,40 @@ set -uo pipefail
 DIR="${1:-./recordings}"
 
 echo "Looking for recordings in: $DIR"
-if [ ! -d "$DIR" ]; then
-  echo "  (directory does not exist yet)"
-  exit 1
-fi
+[ -d "$DIR" ] || { echo "  (directory does not exist yet)"; exit 1; }
 
-mapfile -t files < <(find "$DIR" -type f -name '*.mp3' -printf '%T@ %p\n' 2>/dev/null \
-                     | sort -nr | head -10 | cut -d' ' -f2-)
+# RTLSDR-Airband writes <name>.mp3.tmp WHILE recording, then renames it to
+# <name>.mp3 once the file finalizes: hourly rotation for a continuous channel,
+# squelch-close for split_on_transmission, or on shutdown. So during active
+# recording you'll see a GROWING .tmp — that's success in progress, and it's
+# also why rdio-scanner's dirwatch (Step 2) only ingests the final .mp3.
+mapfile -t lines < <(find "$DIR" -type f \( -name '*.mp3' -o -name '*.mp3.tmp' \) \
+                     -printf '%T@\t%s\t%p\n' 2>/dev/null | sort -nr | head -10)
 
-if [ "${#files[@]}" -eq 0 ]; then
-  echo "  No .mp3 files yet."
+if [ "${#lines[@]}" -eq 0 ]; then
+  echo "  No recordings yet."
   echo "  - Give it ~30–60s after the container starts."
   echo "  - Watch logs:   docker compose logs -f rtlsdr-airband"
   echo "  - A crash-loop usually means the SDR is busy (stop owrx) or not found."
   exit 1
 fi
 
-echo "Most recent recordings:"
-for f in "${files[@]}"; do
-  printf '  %5s  %s\n' "$(du -h "$f" | cut -f1)" "$f"
+echo "Recent recordings (newest first):"
+newest=""
+for line in "${lines[@]}"; do
+  size=$(printf '%s' "$line" | cut -f2)
+  path=$(printf '%s' "$line" | cut -f3)
+  [ -z "$newest" ] && newest="$path"
+  human=$(numfmt --to=iec --suffix=B "$size" 2>/dev/null || echo "${size}B")
+  if [[ "$path" == *.tmp ]]; then
+    printf '  %9s  %s   <-- recording now\n' "$human" "$path"
+  else
+    printf '  %9s  %s   (finalized)\n' "$human" "$path"
+  fi
 done
+
 echo
-echo "A NOAA file that keeps GROWING == the chain works. Play it with:"
-echo "  ffplay '${files[0]}'        # or copy it off-host into any audio player"
+echo "A growing *.mp3.tmp means the receive -> demod -> record chain works."
+echo "This host has no audio out, so to LISTEN, copy it to your laptop (a partial"
+echo ".tmp is a valid MP3 and plays fine) and open it in any player:"
+echo "  scp '$USER@<this-host-ip>:$PWD/${newest##*/}' ."
