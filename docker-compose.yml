@@ -19,12 +19,13 @@
 
 services:
   rtlsdr-airband:
-    # Official image; two-stage build bundles the RTL-SDR Blog V4 librtlsdr
-    # fork so the v4 tunes correctly in-container.
-    # If this path ever 404s, try: ghcr.io/rtl-airband/rtlsdr-airband:latest
-    # Reproducibility: once a version works, pin it instead of :latest
-    # (see README "Pinning & Watchtower").
-    image: ghcr.io/charlie-foxtrot/rtlsdr-airband:latest
+    # Official image (rtl-airband org); two-stage build bundles the RTL-SDR Blog
+    # V4 librtlsdr fork so the v4 tunes correctly in-container. Pinned to v5.2.0
+    # for reproducibility (== :latest at time of writing; multi-arch incl. amd64).
+    # NOTE: the older ghcr.io/charlie-foxtrot/... path is deprecated (frozen at
+    # v5.0.12) and now DENIES pulls after the org rename — use rtl-airband below.
+    # Newer versions: https://github.com/rtl-airband/RTLSDR-Airband/pkgs/container/rtlsdr-airband
+    image: ghcr.io/rtl-airband/rtlsdr-airband:v5.2.0
     container_name: hawksroost-airband
     restart: unless-stopped
 

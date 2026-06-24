@@ -84,7 +84,7 @@ and troubleshooting: **[docs/STEP-1-recording.md](docs/STEP-1-recording.md)**.
 ## Three hard realities baked into this design
 
 1. **RTL-SDR v4 needs the Blog driver.** Stock librtlsdr can't tune a v4. Our
-   image (`ghcr.io/charlie-foxtrot/rtlsdr-airband`) builds the
+   image (`ghcr.io/rtl-airband/rtlsdr-airband`) builds the
    `rtlsdrblog/rtl-sdr-blog` fork, so the v4 works **inside the container**.
    Your host already has the v4 drivers + `dvb_usb_rtl28xxu` blacklisted
    (preflight re-checks). See **[docs/PREFLIGHT.md](docs/PREFLIGHT.md)**.
@@ -104,11 +104,14 @@ and troubleshooting: **[docs/STEP-1-recording.md](docs/STEP-1-recording.md)**.
 
 ## Pinning & Watchtower
 
-Your host runs **Watchtower**, which auto-updates `:latest` images. To keep the
-SDR stack reproducible, each service here carries
-`com.centurylinklabs.watchtower.enable=false`. Once a version proves good,
-**pin it** — e.g. replace `:latest` with a specific release tag in
-`docker-compose.yml` — and you control upgrades deliberately.
+Your host runs **Watchtower**, which auto-updates `:latest` images. The SDR
+service is **pinned to `v5.2.0`** *and* carries
+`com.centurylinklabs.watchtower.enable=false`, so upgrades stay deliberate. To
+move versions, bump the tag in `docker-compose.yml` — see the
+[published image tags](https://github.com/rtl-airband/RTLSDR-Airband/pkgs/container/rtlsdr-airband).
+
+> The old `ghcr.io/charlie-foxtrot/...` path is deprecated after the project's
+> org rename and now denies pulls — we use `ghcr.io/rtl-airband/...`.
 
 ---
 
