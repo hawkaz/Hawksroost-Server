@@ -26,7 +26,7 @@ survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md))
 |---|---|---|---|
 | D1 | Stack | Python (FastAPI) + SvelteKit PWA + SQLite | 2026-10-31 |
 | D2 | Argus Solar | Skip for now; keep using the Reolink app | 2026-10-31 |
-| D3 | Remote access | ~~Cloudflare Tunnel~~ → **direct**: Starlink Local Priority public IP, router forwards 80/443, Caddy + Let's Encrypt, Cloudflare DNS-only + DDNS updater. Also serves Home Assistant at ha.hawksroost.live | 2026-10-31 |
+| D3 | Remote access | ~~Cloudflare Tunnel~~ → **direct**: Starlink Local Priority public IP, router forwards 80/443, Caddy + Let's Encrypt, Cloudflare DNS-only + DDNS updater. | 2026-10-31 |
 | D4 | Radio hardware | One dongle now; built so more dongles are added in the app | 2026-10-31 |
 | D5 | P25 | Not planned | 2026-10-31 |
 | D7 | Domain | hawksroost.live on Cloudflare DNS | 2026-10-31 |
@@ -93,8 +93,8 @@ gRPC port reachable, RTL-SDR present. Found: time zone was Denver; ufw active
 old test recorder still running (20 GB); OpenWebRX, nginx-proxy-manager,
 Portainer unused; Wi-Fi and Ethernet both on the same subnet; SSH password-only.
 
-Chris's choices: keep Home Assistant and Watchtower; remove nginx-proxy-manager,
-Portainer, OpenWebRX, old recorder; Wi-Fi off; printing/Bluetooth/ModemManager
+Chris's choices: remove nginx-proxy-manager, Portainer, OpenWebRX, old recorder,
+and (later the same day) Home Assistant + Watchtower — not in use yet; Wi-Fi off; printing/Bluetooth/ModemManager
 off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 
 ## Still open
@@ -114,7 +114,6 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 ┌──────────────── Dell Latitude · Debian · Docker Compose ─────────────────────┐
 │  caddy (host network, Let's Encrypt) ──► web :8080 (nginx: app files;        │
 │        /api → api; /video → go2rtc; /radio/live → icecast; session guard)    │
-│        └─► ha.hawksroost.live → Home Assistant :8123                         │
 │  api (FastAPI, 1 worker): auth, roles, push, calendar, lists, cameras,       │
 │       clips (ffmpeg), radio indexer, nightly backup ── SQLite in data/       │
 │  collector (host network): Tempest UDP 50222, Starlink gRPC                  │
@@ -146,4 +145,6 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   BIOS Wake on AC set. Power-loss test skipped.
 - 2026-10-31 — Switched the front door from Cloudflare Tunnel to direct
   (Caddy + Let's Encrypt + Cloudflare DDNS) after Chris confirmed a Starlink
-  public IP; Home Assistant served at ha.hawksroost.live.
+  public IP.
+- 2026-10-31 — Retired Home Assistant and Watchtower (not in use yet); prep
+  script removes them and the old ~/Docker stack.

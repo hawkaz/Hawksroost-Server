@@ -5,13 +5,14 @@
 # Sets cabin time zone, installs updates, nightly reboot window for kernel
 # updates, clean shutdown on low battery, firewall rule for the Tempest hub,
 # Docker log limits; removes old containers/data; turns off Wi-Fi and unused
-# desktop services. Home Assistant and Watchtower are kept.
+# desktop services, and retires the old ~/Docker stack (Home Assistant,
+# Watchtower, nginx-proxy-manager, Portainer, OpenWebRX).
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "FAIL  run it with sudo: sudo bash $0"; exit 1; }
 OWNER="${SUDO_USER:-chris}"
 HOME_DIR=$(getent passwd "$OWNER" | cut -d: -f6)
-STACK_DIR="$HOME_DIR/Docker"           # Home Assistant + Watchtower compose
+STACK_DIR="$HOME_DIR/Docker"           # old compose stack (retired)
 OLD_REPO="$HOME_DIR/hawksroost-server" # first SDR test (recordings)
 
 step() { printf '\n== %s\n' "$1"; }
@@ -96,39 +97,24 @@ if [ -d "$OLD_REPO" ]; then
   ok "removed $OLD_REPO (old NOAA test recordings)"
 fi
 
-if [ -f "$STACK_DIR/docker-compose.yml" ] && grep -q 'nginx-proxy-manager\|portainer\|owrx' "$STACK_DIR/docker-compose.yml"; then
-  cp "$STACK_DIR/docker-compose.yml" "$STACK_DIR/docker-compose.yml.bak-$(date +%Y%m%d)"
-  cat > "$STACK_DIR/docker-compose.yml" <<'EOF'
-services:
-  homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:stable
-    container_name: homeassistant
-    restart: always
-    ports:
-      - "8123:8123"
-    volumes:
-      - ./homeassistant/config:/config
-      - /etc/localtime:/etc/localtime:ro
-
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: --cleanup --schedule "0 0 3 * * *" --include-restarting
-EOF
-  ok "~/Docker/docker-compose.yml now has Home Assistant + Watchtower (backup saved beside it)"
-fi
-for c in owrx nginx-proxy-manager portainer; do
+# The old ~/Docker stack (Home Assistant, Watchtower, nginx-proxy-manager,
+# Portainer, OpenWebRX) is retired. Keep ~/Docker/rtl-sdr (driver source for
+# the host's rtl_test tools).
+for c in homeassistant watchtower owrx nginx-proxy-manager portainer; do
   if exists "$c"; then docker rm -f "$c" >/dev/null; ok "removed container $c"; fi
 done
 for v in docker_nginx_data docker_nginx_letsencrypt docker_portainer_data docker_openwebrx_settings portainer_data; do
   if docker volume rm "$v" >/dev/null 2>&1; then ok "removed volume $v"; fi
 done
-for d in OpenWebRX openwebrx sdrpp; do
+for d in homeassistant OpenWebRX openwebrx sdrpp; do
   if [ -d "$STACK_DIR/$d" ]; then rm -rf "${STACK_DIR:?}/$d"; ok "removed ~/Docker/$d"; fi
 done
+for f in "$STACK_DIR"/docker-compose.yml "$STACK_DIR"/docker-compose.yml.bak-*; do
+  if [ -f "$f" ]; then rm -f "$f"; ok "removed ~/Docker/$(basename "$f")"; fi
+done
+if docker network inspect docker_default >/dev/null 2>&1; then
+  docker network rm docker_default >/dev/null 2>&1 && ok "removed network docker_default"
+fi
 
 # --- 6. Wi-Fi off (Ethernet only) ----------------------------------------------------
 step "Wi-Fi"
@@ -167,25 +153,19 @@ if [ ! -f /etc/docker/daemon.json ]; then
 }
 EOF
   ok "log limits: 10 MB x 3 per container"
-  LOGS_NEW=1
   systemctl restart docker
   ok "Docker restarted"
 else
   note "/etc/docker/daemon.json already exists — left alone"
 fi
 if systemctl is-enabled --quiet docker; then ok "Docker starts at boot"; else systemctl enable docker containerd >/dev/null 2>&1; ok "Docker set to start at boot"; fi
-# Recreate Home Assistant + Watchtower once, so they pick up the new log limits.
-RECREATE=""; [ "${LOGS_NEW:-0}" = 1 ] && RECREATE="--force-recreate"
-(cd "$STACK_DIR" && docker compose up -d $RECREATE --remove-orphans) >/dev/null 2>&1 \
-  && ok "Home Assistant and Watchtower running" \
-  || note "couldn't restart ~/Docker stack — check: cd ~/Docker && docker compose up -d"
 docker image prune -af >/dev/null && docker volume prune -f >/dev/null && docker builder prune -af >/dev/null
 ok "unused Docker images, volumes and build cache removed"
 
 # --- Summary ---------------------------------------------------------------------
 step "Done"
 df -h / | awk 'NR==2{print "Disk: "$4" free"}'
-docker ps --format '  {{.Names}}: {{.Status}}'
+echo "Containers running: $(docker ps -q | wc -l) (none expected until the cabin app is installed)"
 if [ -f /var/run/reboot-required ]; then
   echo "NOTE  an update needs a reboot — Claude will have you reboot next."
 fi

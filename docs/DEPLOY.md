@@ -13,7 +13,7 @@ channels, sign-in photo) are set up in the app afterwards, under
    shutdown on low battery, BIOS power-on when AC returns + battery charge
    limit, Docker ready, unneeded containers removed.
 3. Deploy key, then put the code in `/opt/hawksroost`.
-4. Front door: router port forward, Cloudflare DNS token, Home Assistant proxy setting; run the installer.
+4. Front door: router port forward, Cloudflare DNS token; run the installer.
 5. First admin account.
 6. Integrations in the app (camera, Tempest, Starlink, email, Google).
 7. Power-loss test: pull the plug, let it come back, check everything restarts.
@@ -69,7 +69,7 @@ Success ends with `Resolving deltas: 100%`. `Permission denied (publickey)` mean
 
 ## Server prep (after the code is in place)
 
-Run once (safe to re-run). Takes a few minutes; Home Assistant restarts twice:
+Run once (safe to re-run). Takes a few minutes:
 
 ```bash
 sudo bash /opt/hawksroost/scripts/server-prep.sh
@@ -80,7 +80,8 @@ when an update needs it, shuts down cleanly at 7% battery (UPower), allows the
 Tempest hub's UDP 50222 broadcasts through ufw, sets Docker log limits, removes
 OpenWebRX / nginx-proxy-manager / Portainer / the old test recorder and its
 20 GB of recordings, turns Wi-Fi off (Ethernet only) and turns off printing,
-Bluetooth and ModemManager. Home Assistant and Watchtower stay.
+Bluetooth and ModemManager, and retires the old `~/Docker` stack (Home Assistant,
+Watchtower). Only `~/Docker/rtl-sdr` (driver source) is kept.
 
 Then, at the laptop: **BIOS (F2) → Power Management → AC Behavior → Wake on AC: on**
 [VERIFY menu path on the 5420]. Battery charge is already limited to 75–80%.
@@ -100,11 +101,9 @@ relocation or software update).
 2. **Router — port forwarding:** TCP **80** and TCP **443** → `192.168.67.101` (same ports).
 3. **Cloudflare — API token:** My Profile → **API Tokens → Create Token → "Edit zone DNS"** template →
    Zone Resources: *Include → Specific zone → hawksroost.live* → Create. Copy the token (the installer asks for it).
-4. **Cloudflare — DNS:** nothing to add by hand. The updater creates `hawksroost.live` and
-   `ha.hawksroost.live` as **DNS only** (grey cloud). Delete any old record for those two names
-   that points somewhere else (e.g. an old tunnel CNAME).
-5. **Home Assistant:** it must trust Caddy, or it answers "400: Bad Request". Claude gives the exact
-   lines for `~/Docker/homeassistant/config/configuration.yaml` after seeing the current file.
+4. **Cloudflare — DNS:** nothing to add by hand. The updater creates `hawksroost.live` as
+   **DNS only** (grey cloud). Delete any old record for that name that points somewhere else
+   (e.g. an old tunnel CNAME).
 
 ## 4. Install
 
