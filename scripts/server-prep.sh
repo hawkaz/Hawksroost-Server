@@ -29,6 +29,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade
 apt-get -y -q install upower
+apt-get -y -q autoremove
 ok "system up to date"
 
 cat > /etc/apt/apt.conf.d/52hawksroost-reboot <<'EOF'
@@ -50,8 +51,32 @@ set_key PercentageLow 20.0
 set_key PercentageCritical 10.0
 set_key PercentageAction 7.0
 set_key CriticalPowerAction PowerOff
+# Debian only starts UPower when a desktop asks for it. This laptop has no
+# desktop, so start it at every boot or the low-battery shutdown never happens.
+cat > /etc/systemd/system/hawksroost-upower.service <<'UNIT'
+[Unit]
+Description=Keep UPower running for the low-battery shutdown (Hawksroost)
+Wants=upower.service
+After=upower.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/upower --enumerate
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable hawksroost-upower.service >/dev/null 2>&1
 systemctl restart upower
-ok "shuts down cleanly at 7% battery (Wake on AC in the BIOS powers it back on)"
+systemctl restart hawksroost-upower.service
+if upower -d | grep -q 'critical-action:.*PowerOff'; then
+  ok "UPower starts at boot; shuts down cleanly at 7% battery (Wake on AC powers it back on)"
+else
+  echo "FAIL  UPower isn't reporting PowerOff — send this output to Claude"
+  upower -d | grep -A12 'Daemon:' || true
+fi
 
 # --- 4. Firewall: Tempest broadcasts -----------------------------------------------
 step "Firewall"
@@ -140,14 +165,16 @@ if [ ! -f /etc/docker/daemon.json ]; then
 }
 EOF
   ok "log limits: 10 MB x 3 per container"
+  LOGS_NEW=1
   systemctl restart docker
   ok "Docker restarted"
 else
   note "/etc/docker/daemon.json already exists — left alone"
 fi
 if systemctl is-enabled --quiet docker; then ok "Docker starts at boot"; else systemctl enable docker containerd >/dev/null 2>&1; ok "Docker set to start at boot"; fi
-# Recreate Home Assistant + Watchtower so they pick up the log limits.
-(cd "$STACK_DIR" && docker compose up -d --force-recreate --remove-orphans) >/dev/null 2>&1 \
+# Recreate Home Assistant + Watchtower once, so they pick up the new log limits.
+RECREATE=""; [ "${LOGS_NEW:-0}" = 1 ] && RECREATE="--force-recreate"
+(cd "$STACK_DIR" && docker compose up -d $RECREATE --remove-orphans) >/dev/null 2>&1 \
   && ok "Home Assistant and Watchtower running" \
   || note "couldn't restart ~/Docker stack — check: cd ~/Docker && docker compose up -d"
 docker image prune -af >/dev/null && docker volume prune -f >/dev/null && docker builder prune -af >/dev/null
