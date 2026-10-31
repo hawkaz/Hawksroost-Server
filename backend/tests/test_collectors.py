@@ -19,3 +19,17 @@ def test_starlink_rollup_sums_bytes():
     rows = rollup(datetime(2026, 7, 1, 12, 0, 59), bulk, n)
     assert sum(r["down_bytes"] for r in rows) == 1000 * n
     assert sum(r["seconds"] for r in rows) == n
+
+
+def test_tempest_keeps_newest_reading():
+    from app import state
+    from app.collector.tempest import handle
+    from app.db import SessionLocal
+
+    def obs(t, temp):
+        return {"type": "obs_st", "serial_number": "ST-1", "obs": [[t, 0, 1, 2, 90, 3, 800, temp, 40, 0, 0, 0, 0, 0, 0, 0, 2.6, 1]]}
+
+    handle(obs(1_800_000_100, 10.0))
+    handle(obs(1_800_000_000, 5.0))  # older packet arrives late
+    with SessionLocal() as db:
+        assert state.get(db, "tempest_obs")["temp_c"] == 10.0

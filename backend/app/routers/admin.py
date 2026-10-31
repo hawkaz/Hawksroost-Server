@@ -171,6 +171,23 @@ async def test_email(body: TestEmailIn, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.post("/backup")
+async def backup_now():
+    import asyncio
+
+    from ..services.jobs import backup_now as run_backup
+    try:
+        return await asyncio.to_thread(run_backup)
+    except Exception as e:
+        raise HTTPException(500, f"Backup failed: {e}")
+
+
+@router.get("/tempest/devices")
+def tempest_devices(db: Session = Depends(get_db)):
+    """Tempest serial numbers heard on the network, to help fill in Settings."""
+    return state.get(db, "tempest_devices") or {}
+
+
 # --- Health --------------------------------------------------------------------------
 
 def _age_s(ts) -> float | None:

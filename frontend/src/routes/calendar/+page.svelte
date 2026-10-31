@@ -126,9 +126,9 @@
 
 <div class="stack">
 	<div class="spread">
-		<div class="row">
+		<div class="row" style="gap:4px">
 			<button class="btn icon secondary" onclick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={20} strokeWidth={1.75} /></button>
-			<h1 class="h2" style="min-width:150px;text-align:center">{monthLabel}</h1>
+			<h1 class="h2 month">{monthLabel}</h1>
 			<button class="btn icon secondary" onclick={() => shift(1)} aria-label="Next month"><ChevronRight size={20} strokeWidth={1.75} /></button>
 		</div>
 		{#if session.can('edit')}<button class="btn" onclick={() => newBooking()}><Plus size={18} strokeWidth={1.75} />Book</button>{/if}
@@ -232,6 +232,17 @@
 <style>
 	.cal {
 		padding: var(--space-2);
+	}
+	.month {
+		text-align: center;
+		min-width: 0;
+		font-size: 18px;
+	}
+	@media (min-width: 900px) {
+		.month {
+			min-width: 180px;
+			font-size: 20px;
+		}
 	}
 	.dow,
 	.week {

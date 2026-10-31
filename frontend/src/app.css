@@ -202,6 +202,9 @@ a {
 	display: grid;
 	gap: var(--space-4);
 }
+.grid > * {
+	min-width: 0;
+}
 @media (min-width: 900px) {
 	.grid-2 {
 		grid-template-columns: 1fr 1fr;

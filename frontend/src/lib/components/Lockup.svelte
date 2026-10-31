@@ -28,7 +28,8 @@
 	}
 	.desc {
 		font: 500 10px/14px var(--font-data);
-		letter-spacing: 0.16em;
+		letter-spacing: 0.1em;
+		white-space: nowrap;
 		text-transform: uppercase;
 		color: #a7b394;
 		margin-top: 2px;

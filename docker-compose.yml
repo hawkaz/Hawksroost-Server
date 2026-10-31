@@ -64,7 +64,7 @@ services:
     image: cloudflare/cloudflared:2026.10.0
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}   # set in .env; the tunnel retries until it is
     depends_on: [web]
 
   # --- Optional: off-site backup copy (COMPOSE_PROFILES=offsite) -----------------------

@@ -124,7 +124,7 @@
 					<p class="muted">Nothing to do. Go sit on the porch.</p>
 				{/if}
 				<a class="row shop" href="/lists?tab=shopping">
-					<span class="grow">Shopping list</span><span class="data">{data.shopping_count} items</span><ChevronRight size={18} strokeWidth={1.75} />
+					<span class="grow">Shopping list</span><span class="data">{data.shopping_count} {data.shopping_count === 1 ? 'item' : 'items'}</span><ChevronRight size={18} strokeWidth={1.75} />
 				</a>
 			</section>
 

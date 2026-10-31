@@ -23,7 +23,7 @@
 			const k = i.store || 'Anywhere';
 			m.set(k, [...(m.get(k) ?? []), i]);
 		}
-		return [...m.entries()];
+		return [...m.entries()].sort(([a], [b]) => (a === 'Anywhere' ? 1 : b === 'Anywhere' ? -1 : a.localeCompare(b)));
 	});
 
 	async function loadShop() {
@@ -192,7 +192,7 @@
 		{#if groups.length}
 			{#each groups as [store, items] (store)}
 				<section class="card">
-					<div class="card-head"><h2>{store}</h2><span class="label">{items.length} items</span></div>
+					<div class="card-head"><h2>{store}</h2><span class="label">{items.length} {items.length === 1 ? 'item' : 'items'}</span></div>
 					<ul class="list">
 						{#each items as i (i.id)}
 							<li>

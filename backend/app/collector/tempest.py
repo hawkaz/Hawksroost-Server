@@ -50,12 +50,14 @@ def handle(msg: dict) -> None:
             state.put(db, "tempest_devices", seen)
 
         if kind == "obs_st":
+            latest = (state.get(db, "tempest_obs") or {}).get("ts", "")
             for values in msg.get("obs", []):
                 obs = parse_obs(values)
                 db.add(WeatherObs(serial=serial, **obs))
-                live = {k: v for k, v in obs.items() if k != "ts"}
-                live["ts"] = obs["ts"].isoformat() + "Z"
-                state.put(db, "tempest_obs", live, commit=False)
+                ts = obs["ts"].isoformat() + "Z"
+                if ts >= latest:  # packets can arrive late; keep "now" the newest
+                    latest = ts
+                    state.put(db, "tempest_obs", {**{k: v for k, v in obs.items() if k != "ts"}, "ts": ts}, commit=False)
             db.commit()
         elif kind == "rapid_wind":
             t, speed, direction = msg["ob"]

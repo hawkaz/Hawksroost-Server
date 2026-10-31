@@ -13,7 +13,7 @@
 
 	async function loadComponent() {
 		if (customElements.get('video-stream')) return;
-		const url = '/video/video-stream.js';
+		const url = new URL('/video/video-stream.js', location.origin).href;
 		await import(/* @vite-ignore */ url);
 	}
 
