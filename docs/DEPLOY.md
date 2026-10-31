@@ -67,13 +67,26 @@ GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" git clone -b main git@
 
 Success ends with `Resolving deltas: 100%`. `Permission denied (publickey)` means the deploy key isn't added yet.
 
-## Power, sleep and updates
+## Server prep (after the code is in place)
 
-Covered in the server-prep step Claude gives after the survey: BIOS **Wake on
-AC** (power on when power returns) and **Primarily AC use** charge limit;
-no suspend on lid close or idle; clean shutdown at low battery; automatic
-security updates with a night-time reboot window. Docker and every app
-container start by themselves at boot.
+Run once (safe to re-run). Takes a few minutes; Home Assistant restarts twice:
+
+```bash
+sudo bash /opt/hawksroost/scripts/server-prep.sh
+```
+
+It sets the time zone to America/Phoenix, installs updates, reboots at 4 am
+when an update needs it, shuts down cleanly at 7% battery (UPower), allows the
+Tempest hub's UDP 50222 broadcasts through ufw, sets Docker log limits, removes
+OpenWebRX / nginx-proxy-manager / Portainer / the old test recorder and its
+20 GB of recordings, turns Wi-Fi off (Ethernet only) and turns off printing,
+Bluetooth and ModemManager. Home Assistant and Watchtower stay.
+
+Then, at the laptop: **BIOS (F2) → Power Management → AC Behavior → Wake on AC: on**
+[VERIFY menu path on the 5420]. Battery charge is already limited to 75–80%.
+
+Power-loss test: unplug the laptop and the router, wait, plug both back in.
+Everything should come back by itself within a few minutes.
 
 ## 3. Cloudflare tunnel
 

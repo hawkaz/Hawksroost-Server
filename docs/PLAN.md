@@ -80,11 +80,25 @@ except where noted.
 | OpenWebRX | Remove when the radio starts |
 | Radio channels | Claude researches and verifies Mormon Lake fire/EMS, law, Forest Service; skip digital/encrypted/trunked |
 
+## Laptop (survey 2026-10-31)
+
+Dell Latitude 5420, Debian 13, i5-1145G7, 7.2 GB RAM, 256 GB NVMe (173 GB free).
+Already good: battery charge limit 75–80%, lid ignored, sleep masked, unattended
+upgrades on, watchdog on, Docker 26.1 + Compose v5 at boot, Starlink dish and
+gRPC port reachable, RTL-SDR present. Found: time zone was Denver; ufw active
+(blocked Tempest broadcasts); no low-battery shutdown; no Docker log limits;
+old test recorder still running (20 GB); OpenWebRX, nginx-proxy-manager,
+Portainer unused; Wi-Fi and Ethernet both on the same subnet; SSH password-only.
+
+Chris's choices: keep Home Assistant and Watchtower; remove nginx-proxy-manager,
+Portainer, OpenWebRX, old recorder; Wi-Fi off; printing/Bluetooth/ModemManager
+off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
+
 ## Still open
 
 | Question | Needed by |
 |---|---|
-| Server survey output → server prep (updates, power-on after outage, sleep, Docker, cleanup) | Install |
+| Run server prep, BIOS Wake on AC, power-loss test | Install |
 | Camera probe output | Camera |
 | Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
 | Delete old branches + set `main` default in GitHub | Any time (Chris) |
