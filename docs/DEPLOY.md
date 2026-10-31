@@ -75,7 +75,7 @@ no suspend on lid close or idle; clean shutdown at low battery; automatic
 security updates with a night-time reboot window. Docker and every app
 container start by themselves at boot.
 
-## 5. Cloudflare tunnel
+## 3. Cloudflare tunnel
 
 In the Cloudflare dashboard (hawksroost.live is on Cloudflare DNS):
 
@@ -85,7 +85,7 @@ In the Cloudflare dashboard (hawksroost.live is on Cloudflare DNS):
 
 Menu names change often; what matters is the token and the route to `http://web:80`.
 
-## 6. Install
+## 4. Install
 
 Asks for the token (paste, Enter — it won't show), builds, and starts everything:
 
@@ -97,7 +97,7 @@ Success ends with `OK: app is up` and a list of running services. Then
 `https://hawksroost.live` shows the sign-in page. On the cabin network it's
 also at `http://<laptop-ip>:8080`.
 
-## 7. First admin
+## 5. First admin
 
 Prints a one-time link (good for 2 days):
 
@@ -107,7 +107,7 @@ bash /opt/hawksroost/scripts/admin-invite.sh
 
 Open it, create your account. Everyone else: **Admin → People → Invite**.
 
-## 8. Integrations (in the app)
+## 6. Integrations (in the app)
 
 All under **Admin → Integrations**:
 
