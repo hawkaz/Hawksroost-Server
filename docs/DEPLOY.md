@@ -50,7 +50,7 @@ sudo mkdir -p /opt/hawksroost && sudo chown "$USER": /opt/hawksroost
 ```
 
 ```bash
-git clone https://github.com/hawkaz/Hawksroost-Server.git /opt/hawksroost
+git clone -b main https://github.com/hawkaz/Hawksroost-Server.git /opt/hawksroost
 ```
 
 If GitHub asks for a password, use a GitHub personal access token (classic, `repo` scope).
