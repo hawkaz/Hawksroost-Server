@@ -16,22 +16,47 @@ from ..timeutil import LOCAL_TZ, iso
 
 router = APIRouter(tags=["radio"])
 
-SEED_CHANNELS = [  # docs/RADIO.md — verify on RadioReference before enabling
-    ("Sheriff", "CCSO-1", 155.490, False),
-    ("Sheriff", "CCSO-2 Dispatch", 155.835, False),
-    ("Fire/EMS", "Highlands Dispatch", 154.175, False),
-    ("Fire/EMS", "Pinewood Dispatch", 154.190, False),
-    ("Fire/EMS", "Pinewood Ops", 154.235, False),
-    ("Fire/EMS", "Ponderosa Dispatch", 154.430, False),
-    ("Forest Service", "Coconino North", 171.425, True),
-    ("Forest Service", "Coconino South", 172.300, True),
-    ("Weather", "NOAA WXK76", 162.400, False),
+# Researched 2026-10-31 for Mormon Lake (sources in docs/RADIO.md). Analog only.
+# (group, label, MHz, tone Hz or None, incident alerts, on by default)
+SEED_CHANNELS = [
+    ("Fire/EMS", "Mormon Lake FD dispatch", 155.6175, 162.2, True, True),
+    ("Fire/EMS", "Fire mutual aid (VFIRE21)", 154.280, None, True, True),
+    ("Fire/EMS", "Highlands FD dispatch", 154.175, 100.0, False, True),
+    ("Fire/EMS", "Summit FD Ops 1", 154.385, None, False, True),
+    ("Fire/EMS", "Pinewood FD dispatch", 154.190, 192.8, False, True),
+    ("Fire/EMS", "Ponderosa FD dispatch", 155.295, None, False, True),
+    ("Fire/EMS", "Summit FD Ops 2", 154.160, 91.5, False, False),
+    ("Fire/EMS", "Summit FD SW Ops", 155.430, 127.3, False, False),
+    ("Fire/EMS", "Pinewood FD ops", 154.235, 94.8, False, False),
+    ("Fire/EMS", "Ponderosa FD tac", 154.430, None, False, False),
+    ("Fire/EMS", "Blue Ridge FD 1", 154.205, 156.7, False, False),
+    ("Fire/EMS", "Blue Ridge FD 2", 155.970, 156.7, False, False),
+    ("Fire/EMS", "Blue Ridge FD 3", 154.145, 156.7, False, False),
+    ("Fire/EMS", "Flagstaff FD alarm (may be P25 now)", 153.935, 100.0, False, False),
+    ("Fire/EMS", "Guardian Medical tac (old listing)", 155.325, 131.8, False, False),
+    ("Fire/EMS", "Guardian Medical rpt (old listing)", 155.790, 131.8, False, False),
+    ("Sheriff", "CCSO 2C dispatch, Mormon Mtn", 155.0175, 114.8, False, True),
+    ("Sheriff", "CCSO 2A dispatch, Flagstaff", 155.835, 114.8, False, True),
+    ("Sheriff", "CCSO 2A, O'Leary Peak", 155.640, 114.8, False, False),
+    ("Sheriff", "AZ DPS District 2", 460.025, 100.0, False, False),
+    ("Forest Service", "Coconino NF South net", 172.300, None, True, True),
+    ("Forest Service", "Coconino NF North net", 171.425, None, False, True),
+    ("Forest Service", "Flagstaff dispatch TAC 1", 171.550, None, True, True),
+    ("Forest Service", "Air-to-ground 1", 168.725, None, True, True),
+    ("Forest Service", "Air-to-ground 2", 166.9625, None, True, False),
+    ("Forest Service", "Air-to-ground 3", 168.6625, None, True, False),
+    ("Forest Service", "TAC 2 (2016 listing)", 168.675, None, False, False),
+    ("Forest Service", "TAC 3 (2016 listing)", 168.775, None, False, False),
+    ("Forest Service", "Flight following", 168.650, None, False, False),
+    ("Forest Service", "AZ Forestry (DFFM) Elden", 151.400, 123.0, False, False),
+    ("Weather", "NOAA WXK76 Flagstaff", 162.400, None, False, False),
+    ("Weather", "NOAA WWG41 Payson", 162.425, None, False, False),
 ]
 
 
 def _chan(c: RadioChannel) -> dict:
     return {"id": c.id, "device_id": c.device_id, "group": c.group, "label": c.label, "freq_mhz": c.freq_mhz,
-            "modulation": c.modulation, "squelch_snr": c.squelch_snr, "incident": c.incident,
+            "modulation": c.modulation, "squelch_snr": c.squelch_snr, "ctcss": c.ctcss, "incident": c.incident,
             "enabled": c.enabled, "sort": c.sort}
 
 
@@ -184,6 +209,7 @@ class ChannelIn(BaseModel):
     freq_mhz: float = Field(ge=24, le=1766)
     modulation: str = Field("nfm", pattern="^(nfm|am)$")
     squelch_snr: float | None = Field(None, ge=0, le=40)
+    ctcss: float | None = Field(None, gt=60, lt=260)
     incident: bool = False
     enabled: bool = True
     sort: int = 0
@@ -214,7 +240,8 @@ def delete_channel(ch_id: int, db: Session = Depends(get_db)):
 
 @router.post("/api/admin/radio/seed", dependencies=[Depends(admin)])
 def seed(db: Session = Depends(get_db)):
-    """Add the starter channel list (turned off) and a first dongle, if missing."""
+    """Add the researched Mormon Lake channel list and a first dongle, if missing.
+    A core set starts on; the rest are there to turn on as wanted."""
     dev = db.scalar(select(RadioDevice).limit(1))
     if dev is None:
         dev = RadioDevice(name="Dongle 1")
@@ -222,10 +249,10 @@ def seed(db: Session = Depends(get_db)):
         db.flush()
     have = {round(f, 4) for (f,) in db.execute(select(RadioChannel.freq_mhz))}
     added = 0
-    for i, (group, label, freq, incident) in enumerate(SEED_CHANNELS):
+    for i, (group, label, freq, tone, incident, enabled) in enumerate(SEED_CHANNELS):
         if round(freq, 4) not in have:
-            db.add(RadioChannel(device_id=dev.id, group=group, label=label, freq_mhz=freq,
-                                incident=incident, enabled=False, sort=i))
+            db.add(RadioChannel(device_id=dev.id, group=group, label=label, freq_mhz=freq, ctcss=tone,
+                                incident=incident, enabled=enabled, sort=i))
             added += 1
     db.commit()
     return {"added": added}

@@ -15,8 +15,9 @@ from ..db import get_db
 from ..deps import admin, camera_control, optional_user, viewer
 from ..models import Camera, CameraEvent, User
 from ..security import can
+from ..services import clips
 from ..services.cameras import CameraOffline, manager, stream_names, test_connection
-from ..timeutil import iso
+from ..timeutil import LOCAL_TZ, iso
 from ..web import sign, unsign
 
 router = APIRouter(tags=["cameras"])
@@ -49,19 +50,27 @@ _snap_cache: dict[int, tuple[float, bytes]] = {}
 
 
 @router.get("/api/cameras/{cam_id}/snapshot")
-async def snapshot(cam_id: int, _: User = Depends(viewer)):
+async def snapshot(cam_id: int, full: bool = False, download: bool = False,
+                   db: Session = Depends(get_db), _: User = Depends(viewer)):
+    """Small still for tiles (cached 5 s), or a full-quality picture to save."""
     cached = _snap_cache.get(cam_id)
-    if cached and time.monotonic() - cached[0] < 5:
+    if not full and cached and time.monotonic() - cached[0] < 5:
         jpg = cached[1]
     else:
         try:
-            jpg = await manager.snapshot(cam_id)
+            jpg = await manager.snapshot(cam_id, "main" if full else "sub")
         except CameraOffline:
             raise HTTPException(503, "Camera is offline")
         if not jpg:
             raise HTTPException(503, "No picture from the camera")
-        _snap_cache[cam_id] = (time.monotonic(), jpg)
-    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=5"})
+        if not full:
+            _snap_cache[cam_id] = (time.monotonic(), jpg)
+    headers = {"Cache-Control": "private, max-age=5"}
+    if download:
+        cam = db.get(Camera, cam_id)
+        stamp = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d-%H%M%S")
+        headers["Content-Disposition"] = f'attachment; filename="{(cam.name if cam else "camera").replace(" ", "_")}-{stamp}.jpg"'
+    return Response(jpg, media_type="image/jpeg", headers=headers)
 
 
 class PtzIn(BaseModel):
@@ -151,6 +160,56 @@ async def recording_file(cam_id: int, name: str, start_id: str, end_id: str,
     return StreamingResponse(body(), media_type="video/mp4", headers=headers)
 
 
+# --- Clips: a short piece of a long recording ------------------------------------------------
+
+class ClipIn(BaseModel):
+    name: str
+    start_id: str
+    end_id: str
+    stream: Literal["main", "sub"] = "sub"
+    offset_s: float = Field(0, ge=0, le=24 * 3600)
+    length_s: float = Field(60, ge=5, le=30 * 60)
+    label: str = Field("clip", max_length=40)
+
+
+def _job_out(job: clips.Job) -> dict:
+    out = {"id": job.id, "status": job.status, "error": job.error, "progress": round(job.progress, 3), "size": job.size}
+    if job.status == "ready":
+        out["url"] = f"/api/cameras/clips/{job.id}"
+    return out
+
+
+@router.post("/api/cameras/{cam_id}/clips", status_code=202)
+def make_clip(cam_id: int, body: ClipIn, db: Session = Depends(get_db), _: User = Depends(viewer)):
+    cam = db.get(Camera, cam_id)
+    if cam is None:
+        raise HTTPException(404)
+    try:
+        job = clips.start(cam_id, cam.name, body.name, body.start_id, body.end_id, body.stream,
+                          body.offset_s, body.length_s, body.label)
+    except RuntimeError as e:
+        raise HTTPException(429, str(e))
+    return _job_out(job)
+
+
+@router.get("/api/cameras/clips/{job_id}/status")
+def clip_status(job_id: str, _: User = Depends(viewer)):
+    job = clips.jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "That clip has expired. Make it again.")
+    return _job_out(job)
+
+
+@router.get("/api/cameras/clips/{job_id}")
+def clip_file(job_id: str, download: bool = False, _: User = Depends(viewer)):
+    job = clips.jobs.get(job_id)
+    if job is None or job.status != "ready" or not clips.clip_path(job).exists():
+        raise HTTPException(404, "That clip has expired. Make it again.")
+    return FileResponse(clips.clip_path(job), media_type="video/mp4",
+                        filename=job.filename if download else None,
+                        content_disposition_type="attachment" if download else "inline")
+
+
 # --- Motion events --------------------------------------------------------------------------
 
 def signed_snapshot_url(event_id: int) -> str:
@@ -168,7 +227,7 @@ def events(cam_id: int, limit: int = 50, db: Session = Depends(get_db), _: User 
 
 
 @router.get("/api/cameras/events/{event_id}/snapshot")
-def event_snapshot(event_id: int, sig: str | None = None, db: Session = Depends(get_db),
+def event_snapshot(event_id: int, sig: str | None = None, download: bool = False, db: Session = Depends(get_db),
                    user: User | None = Depends(optional_user)):
     allowed = user is not None and can(user, "view")
     if not allowed and sig:
@@ -182,7 +241,9 @@ def event_snapshot(event_id: int, sig: str | None = None, db: Session = Depends(
     path = (config.SNAPSHOT_DIR / ev.snapshot).resolve()
     if not path.is_relative_to(config.SNAPSHOT_DIR.resolve()) or not path.exists():
         raise HTTPException(404)
-    return FileResponse(path, media_type="image/jpeg")
+    name = f"motion-{ev.type}-{ev.started_at:%Y%m%d-%H%M%S}.jpg" if download else None
+    return FileResponse(path, media_type="image/jpeg", filename=name,
+                        content_disposition_type="attachment" if download else "inline")
 
 
 # --- Admin: manage cameras ---------------------------------------------------------------------

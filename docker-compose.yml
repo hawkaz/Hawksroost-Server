@@ -67,19 +67,6 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}   # set in .env; the tunnel retries until it is
     depends_on: [web]
 
-  # --- Optional: off-site backup copy (COMPOSE_PROFILES=offsite) -----------------------
-  offsite:
-    <<: *common
-    image: rclone/rclone:1.71
-    profiles: ["offsite"]
-    entrypoint: ["/bin/sh", "/deploy/offsite.sh"]
-    environment:
-      RCLONE_REMOTE: ${RCLONE_REMOTE:-onedrive:Hawksroost}
-    volumes:
-      - ./data/backups:/backups:ro
-      - ./data/rclone:/config/rclone
-      - ./deploy/offsite.sh:/deploy/offsite.sh:ro
-
   # --- Optional: radio scanner (COMPOSE_PROFILES=radio) --------------------------------
   airband:
     <<: *common

@@ -42,7 +42,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 	return res.json() as Promise<T>;
 }
 
+async function upload<T>(path: string, blob: Blob): Promise<T> {
+	const res = await fetch(path, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': blob.type }, body: blob });
+	if (!res.ok) {
+		let message = `Upload failed (${res.status}).`;
+		try {
+			const data = await res.json();
+			if (typeof data.detail === 'string') message = data.detail;
+		} catch {
+			/* not JSON */
+		}
+		throw new ApiError(res.status, message);
+	}
+	return res.json() as Promise<T>;
+}
+
 export const api = {
+	upload,
 	get: <T>(path: string) => request<T>('GET', path),
 	post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
 	put: <T>(path: string, body: unknown = {}) => request<T>('PUT', path, body),

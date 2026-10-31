@@ -6,12 +6,12 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import mailer, push, settings_store, users
+from .. import config, mailer, push, settings_store, users
 from ..db import get_db
 from ..deps import client_ip, current_user, optional_user
 from ..models import Invite, PasswordReset, User
@@ -39,11 +39,23 @@ def _safe_next(value: str | None) -> str:
 @router.get("/config")
 def auth_config(db: Session = Depends(get_db)):
     g = settings_store.get(db, "google")
+    general = settings_store.get(db, "general")
     return {
-        "site_name": settings_store.get(db, "general")["site_name"],
+        "site_name": general["site_name"],
+        "login_photo": f"/api/auth/login-photo?v={general['login_photo_v']}" if general["login_photo"] else None,
         "google": bool(g["enabled"] and g["client_id"] and g["client_secret"]),
         "email": mailer.is_configured(db),
     }
+
+
+@router.get("/login-photo")
+def login_photo(db: Session = Depends(get_db)):
+    """Sign-in screen background, set by an admin. Public: it shows before anyone signs in."""
+    ctype = settings_store.get(db, "general")["login_photo"]
+    path = config.BRANDING_DIR / "login-photo"
+    if not ctype or not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path, media_type=ctype, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/me")

@@ -12,6 +12,8 @@ DB_PATH = DATA_DIR / "hawksroost.db"
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
 BACKUP_DIR = DATA_DIR / "backups"
 RADIO_DIR = DATA_DIR / "radio"
+BRANDING_DIR = DATA_DIR / "branding"
+CLIPS_DIR = DATA_DIR / "clips"
 RECORDINGS_DIR = Path(os.environ.get("HAWK_RECORDINGS_DIR", str(DATA_DIR / "radio" / "recordings")))
 GO2RTC_URL = os.environ.get("HAWK_GO2RTC_URL", "http://go2rtc:1984")
 TZ_NAME = os.environ.get("TZ", "America/Phoenix")
@@ -19,7 +21,7 @@ APP_VERSION = os.environ.get("HAWK_VERSION", "dev")
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, SNAPSHOT_DIR, BACKUP_DIR, RADIO_DIR, RECORDINGS_DIR):
+    for d in (DATA_DIR, SNAPSHOT_DIR, BACKUP_DIR, RADIO_DIR, RECORDINGS_DIR, BRANDING_DIR, CLIPS_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 

@@ -16,10 +16,7 @@ log = logging.getLogger("hawk.jobs")
 
 
 def backup_now() -> dict:
-    """Consistent copy of the SQLite database into data/backups, pruned to keep_days.
-
-    Off-site copy: the `backup` container (rclone) syncs data/backups to OneDrive.
-    """
+    """Consistent copy of the SQLite database into data/backups, pruned to keep_days."""
     with SessionLocal() as db:
         cfg = settings_store.get(db, "backup")
     config.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,4 +68,9 @@ async def daily_loop() -> None:
             log.exception("daily job failed")
             with SessionLocal() as db:
                 state.put(db, "backup", {"ok": False, "detail": f"Backup failed: {e}"})
+        try:
+            from .clips import cleanup as clips_cleanup
+            clips_cleanup()
+        except Exception:
+            log.exception("clip cleanup failed")
         await asyncio.sleep(300)

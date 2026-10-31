@@ -111,13 +111,16 @@ def render_airband(plans: list[DevicePlan], password: str) -> str:
             labels = ", ".join(_q(c.label) for c in p.channels)
             mods = {c.modulation for c in p.channels}
             squelch = min((c.squelch_snr for c in p.channels if c.squelch_snr is not None), default=DEFAULT_SQUELCH)
+            # One tone per frequency; 0 = no tone (RTLSDR-Airband treats 0 as "off" in a list).
+            ctcss = ("ctcss = (" + ", ".join(f"{c.ctcss or 0:.1f}" for c in p.channels) + "); "
+                     if any(c.ctcss for c in p.channels) else "")
             outputs = [_file_output(f"dev{d.id}")]
             if d.live_stream:
                 outputs.append(_icecast_output(mount_name(d), d.name, password, scan=True))
             mod_line = (f"modulation = {_q(mods.pop())};" if len(mods) == 1 else
                         "modulations = (" + ", ".join(_q(c.modulation) for c in p.channels) + ");")
-            chan = ("{ freqs = (%s); labels = (%s); %s bandwidth = %d; squelch_snr_threshold = %.1f; "
-                    "outputs: ( %s ); }" % (freqs, labels, mod_line, NFM_BANDWIDTH, squelch, ", ".join(outputs)))
+            chan = ("{ freqs = (%s); labels = (%s); %s bandwidth = %d; squelch_snr_threshold = %.1f; %s"
+                    "outputs: ( %s ); }" % (freqs, labels, mod_line, NFM_BANDWIDTH, squelch, ctcss, ", ".join(outputs)))
             devices.append("  {\n    " + "\n    ".join(head) + '\n    mode = "scan";\n    channels: (\n      '
                            + chan + "\n    );\n  }")
         else:
@@ -127,11 +130,12 @@ def render_airband(plans: list[DevicePlan], password: str) -> str:
                 outputs = [_file_output(f"ch{c.id}")]
                 if d.live_stream:
                     outputs.append('{ type = "mixer"; name = %s; }' % _q(mixer))
+                tone = f"ctcss = {c.ctcss:.1f}; " if c.ctcss else ""
                 chans.append(
-                    "{ freq = %.4f; label = %s; modulation = %s; bandwidth = %d; squelch_snr_threshold = %.1f; "
+                    "{ freq = %.4f; label = %s; modulation = %s; bandwidth = %d; squelch_snr_threshold = %.1f; %s"
                     "outputs: ( %s ); }" % (c.freq_mhz, _q(c.label), _q(c.modulation), NFM_BANDWIDTH,
                                             c.squelch_snr if c.squelch_snr is not None else DEFAULT_SQUELCH,
-                                            ", ".join(outputs)))
+                                            tone, ", ".join(outputs)))
             if d.live_stream:
                 mixers.append("  %s: { outputs: ( %s ); };" % (
                     mixer, _icecast_output(mount_name(d), d.name, password, scan=False)))

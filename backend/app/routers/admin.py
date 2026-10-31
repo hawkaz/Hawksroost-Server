@@ -149,6 +149,7 @@ def get_settings(request: Request, db: Session = Depends(get_db)):
 def put_settings(section: str, body: dict, request: Request, db: Session = Depends(get_db)):
     if section not in EDITABLE:
         raise HTTPException(404, "Unknown section")
+    body = {k: v for k, v in body.items() if not k.startswith("login_photo")}  # set via /login-photo
     try:
         settings_store.update(db, section, body)
     except (TypeError, ValueError):
@@ -186,6 +187,34 @@ async def backup_now():
 def tempest_devices(db: Session = Depends(get_db)):
     """Tempest serial numbers heard on the network, to help fill in Settings."""
     return state.get(db, "tempest_devices") or {}
+
+
+# --- Sign-in photo ------------------------------------------------------------------
+
+PHOTO_TYPES = {b"\xff\xd8\xff": "image/jpeg", b"\x89PNG": "image/png", b"RIFF": "image/webp"}
+MAX_PHOTO = 10 * 1024 * 1024
+
+
+@router.put("/login-photo")
+async def upload_login_photo(request: Request, db: Session = Depends(get_db)):
+    """Raw image body (the browser resizes it first). JPEG, PNG or WebP."""
+    data = await request.body()
+    if len(data) > MAX_PHOTO:
+        raise HTTPException(413, "That photo is too big. Try a smaller one (under 10 MB).")
+    ctype = next((t for magic, t in PHOTO_TYPES.items() if data.startswith(magic)), None)
+    if ctype is None or (ctype == "image/webp" and data[8:12] != b"WEBP"):
+        raise HTTPException(400, "Use a JPEG, PNG or WebP photo.")
+    config.BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+    (config.BRANDING_DIR / "login-photo").write_bytes(data)
+    v = int(settings_store.get(db, "general")["login_photo_v"]) + 1
+    settings_store.update(db, "general", {"login_photo": ctype, "login_photo_v": v})
+    return {"url": f"/api/auth/login-photo?v={v}"}
+
+
+@router.delete("/login-photo", status_code=204)
+def remove_login_photo(db: Session = Depends(get_db)):
+    (config.BRANDING_DIR / "login-photo").unlink(missing_ok=True)
+    settings_store.update(db, "general", {"login_photo": ""})
 
 
 # --- Health --------------------------------------------------------------------------

@@ -7,21 +7,18 @@ How to install and run: [DEPLOY.md](DEPLOY.md). Radio hardware: [RADIO.md](RADIO
 ## Status (2026-10-31)
 
 **All phases are built and tested in a container.** Nothing has run on the real
-laptop or touched real devices yet. What's next needs Chris:
-
-1. Run `scripts/inventory.sh` on the laptop and send the output.
-2. Create the Cloudflare tunnel and run `scripts/install.sh` ([DEPLOY.md](DEPLOY.md) steps 3–6).
-3. Add the TrackMix in the app and run the camera probe; send its output.
+laptop or devices yet. Next needs Chris: deploy key + clone, then the laptop
+inventory ([DEPLOY.md](DEPLOY.md) steps 1–3).
 
 | Phase | State | Verified on real hardware? |
 |---|---|---|
 | 0 Host prep | Scripts + guide written | No — needs Chris |
-| 1 Foundation (auth, roles, PWA, push, backups, health) | Built, tested | No |
-| 2 Household (calendar, shopping, to-do) | Built, tested | n/a (no devices) |
-| 3 Weather + Starlink | Built; tested with simulated Tempest packets | No — Tempest/Starlink [VERIFY] |
-| 4 TrackMix | Built on `reolink_aio`; probe script ready | No — [VERIFY] streams, tele lens, PTZ, recordings, push events |
+| 1 Foundation (auth, roles, PWA, push, backups, health, sign-in photo) | Built, tested | No |
+| 2 Household (calendar, shopping, to-do) | Built, tested | n/a |
+| 3 Weather + Starlink | Built; tested with simulated Tempest packets | No — [VERIFY] |
+| 4 TrackMix (live, PTZ, recordings, clips, pictures, alerts) | Built on `reolink_aio`; clip cutting tested with a generated video | No — [VERIFY] streams, tele lens, PTZ, SD search/download, push events |
 | 5 Argus | Skipped (decision) | — |
-| 6 Radio | Built; generated config parses in RTLSDR-Airband | No — needs dongle; [VERIFY] filename/frequency format |
+| 6 Radio | Built; researched Mormon Lake list (docs/RADIO.md) with repeater tones; generated config parses in RTLSDR-Airband | No — needs dongle |
 
 ## Decisions
 
@@ -37,6 +34,7 @@ laptop or touched real devices yet. What's next needs Chris:
 | — | Bookings | Open booking; overlapping stays allowed but flagged | 2026-10-31 |
 | — | Email | Brevo (SMTP), configured in the app | 2026-10-31 |
 | — | Integrations | All set up in the admin UI, not in files. `.env` holds only the tunnel token and a few server options | 2026-10-31 |
+| — | Backups | Nightly local SQLite copies only; no off-site | 2026-10-31 |
 | — | Git | Everything on `main`, no branches | 2026-10-31 |
 | — | Build order | Radio last | 2026-10-31 |
 
@@ -52,43 +50,44 @@ laptop or touched real devices yet. What's next needs Chris:
 **D3 mitigations:** sub-stream by default, full quality only on tap, live view
 pauses after 5 minutes, no prefetching, video isolated under `/video/`.
 
-## Decisions Claude made — for Chris to review
+## Chris's answers (2026-10-31)
 
-None of these block anything; each is easy to change.
+All 22 items answered on the decisions page. Recommended options were accepted
+except where noted.
 
-1. **rdio-scanner and the separate "control service" from the old SDR plan are
-   dropped.** The app's Radio tab does listening, recordings, Keep, retention and
-   busy-channel alerts itself. One app, one login.
-2. **Camera motion events use Reolink's TCP push (via `reolink_aio`)**, not the
-   HTTP webhook. No camera-side webhook setup or LAN-only receiver needed. Falls
-   back to polling every 3 s if push fails.
-3. **Camera recordings stay on the SD card** for now (the brief's Phase 1). The
-   recordings code sits behind one interface so a USB HDD can be added later.
-4. **Secrets entered in the app (camera password, SMTP key, Google secret, Tempest
-   token) are stored in the database unencrypted** and never sent back to the
-   browser. The nightly backup (and the OneDrive copy) contains them. Encrypting
-   them would need a key that also has to be backed up, so it buys little here.
-5. **LAN access on port 8080 over plain HTTP** is on, for setup and for when
-   Starlink is down. Notifications and install-as-app need HTTPS, so they only
-   work through hawksroost.live.
-6. **Default lists:** "To-do" and "Before we leave" (a reusable checklist with an "untick all" button).
-7. **Times show in cabin time** (Arizona) for everyone, wherever they are.
-8. **Weather data kept ~2 years; camera motion events 30 days; radio calls 30 days / 20 GB** (Keep and busy-channel calls never expire). All but weather are adjustable in the app.
-9. **Login screen uses plain pine**, not a photo. The brand guide wants family photos; send some and they go in.
-10. **Pine app icon generated** from the brand's transparent icon (the guide names `icon-cabin-512.png` but the package doesn't include it).
-11. **Charts plot one series each.** The brand colours don't pass colour-blind
-    separation as a multi-series palette, so temperature, wind, humidity, rain and
-    Starlink latency each get their own chart.
+| Item | Answer |
+|---|---|
+| Radio UI | App's Radio tab only; no rdio-scanner |
+| Camera motion events | Reolink TCP push. Chris manages the camera in the Reolink app; nobody else gets Reolink app access |
+| Camera recordings | Camera records 24/7 to its SD card (configured in the Reolink app); retention = card size. The app is a viewer for those recordings. **Added:** save full-quality pictures, cut short clips from long recordings, save motion pictures |
+| Secrets | Stored as-is in the database |
+| Off-site backup | **None.** OneDrive backup removed; nightly local backups only |
+| LAN access (:8080) | On |
+| Starter lists | To-do + Before we leave |
+| Times | Cabin time (MST, UTC−7, no DST) |
+| Retention | Defaults |
+| Sign-in photo | Pine for now. **Added:** admin uploads a photo in Admin → Integrations |
+| App icon | Pine tile |
+| Charts | One measurement per chart |
+| Live view pause | 5 minutes |
+| Booking notifications | On by default |
+| Invite links | 7 days |
+| Admins | Just Chris for now |
+| Repo | Private → laptop uses a read-only deploy key (DEPLOY.md step 1) |
+| Old branches | Claude to delete — **blocked by the session's safety check twice**; Chris deletes in GitHub and sets `main` as default (GitHub only allows that in settings) |
+| Email sender | `cabin@hawksroost.live`, domain authenticated in Brevo |
+| Host nginx | Not needed; left alone |
+| OpenWebRX | Remove when the radio starts |
+| Radio channels | Claude researches and verifies Mormon Lake fire/EMS, law, Forest Service; skip digital/encrypted/trunked |
 
 ## Still open
 
 | Question | Needed by |
 |---|---|
-| Laptop inventory (OS, ports, existing nginx/OpenWebRX/Watchtower, LAN, Tempest/Starlink reachable) | Install |
-| Who else is admin | Any time |
-| Family photos for the login screen | Any time |
-| Camera retention / when to add a USB HDD (D6) | After the camera runs a while |
-| Verified radio channel list (RadioReference) | Radio |
+| Laptop inventory output | Install |
+| Camera probe output | Camera |
+| Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
+| Delete old branches + set `main` default in GitHub | Any time (Chris) |
 
 ## Architecture
 
@@ -102,7 +101,7 @@ None of these block anything; each is easy to change.
 │       radio indexer, nightly backup ── SQLite in data/                       │
 │  collector (host network): Tempest UDP 50222, Starlink gRPC                  │
 │  go2rtc: camera RTSP → MSE/HLS (streams registered by the api)               │
-│  optional: offsite (rclone → OneDrive), airband + icecast (radio)            │
+│  optional: airband + icecast (radio)                                         │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,3 +116,9 @@ None of these block anything; each is easy to change.
 - 2026-10-31 — Full stack run in Docker here: nginx routes, auth guards on
   video/radio, simulated Tempest data, radio config accepted by RTLSDR-Airband
   (scan and multichannel), Icecast starts.
+- 2026-10-31 — Applied Chris's answers: removed OneDrive backup; sign-in photo
+  upload; camera "Save picture", clips (fetch over LAN + ffmpeg cut, background
+  job) and motion-picture download; deploy key flow for the private repo; Brevo
+  domain steps; OpenWebRX removal step.
+- 2026-10-31 — Researched Mormon Lake analog channels (32 loaded, 12 on by
+  default, scan mode); added per-channel CTCSS tone (migration 0002).

@@ -29,3 +29,21 @@ def test_settings_secrets_write_only(client):
     all_settings = client.get("/api/admin/settings").json()
     assert "push" not in all_settings
     assert all_settings["google"]["redirect_uri"].endswith("/api/auth/google/callback")
+
+
+def test_login_photo_upload(client):
+    login(client, "admin")
+    assert client.get("/api/auth/config").json()["login_photo"] is None
+    jpg = b"\xff\xd8\xff\xe0" + b"0" * 100
+    r = client.put("/api/admin/login-photo", content=jpg, headers={"Content-Type": "image/jpeg"})
+    assert r.status_code == 200
+    url = client.get("/api/auth/config").json()["login_photo"]
+    client.post("/api/auth/logout")
+    got = client.get(url)
+    assert got.status_code == 200 and got.content == jpg
+
+
+def test_login_photo_rejects_non_images(client):
+    login(client, "admin")
+    r = client.put("/api/admin/login-photo", content=b"<svg>", headers={"Content-Type": "image/svg+xml"})
+    assert r.status_code == 400

@@ -8,7 +8,7 @@
 	import { toast } from '#lib/toast.svelte.ts';
 
 	interface Device { id: number; name: string; serial: string | null; index: number; gain: number; correction: number; mode: string; centerfreq: number | null; live_stream: boolean; enabled: boolean }
-	interface Channel { id: number; device_id: number | null; group: string; label: string; freq_mhz: number; modulation: string; squelch_snr: number | null; incident: boolean; enabled: boolean; sort: number }
+	interface Channel { id: number; device_id: number | null; group: string; label: string; freq_mhz: number; modulation: string; squelch_snr: number | null; ctcss: number | null; incident: boolean; enabled: boolean; sort: number }
 	interface Plan { changed?: boolean; errors: string[]; devices: { id: number; name: string; mode: string; centerfreq: number | null; channels: number; mount: string | null }[] }
 
 	let settings = $state<Record<string, unknown> | null>(null);
@@ -19,7 +19,7 @@
 	let devOpen = $state(false);
 	let dform = $state<Device>({ id: 0, name: '', serial: '', index: 0, gain: 32, correction: 0, mode: 'auto', centerfreq: null, live_stream: true, enabled: true });
 	let chOpen = $state(false);
-	let cform = $state<Channel>({ id: 0, device_id: null, group: '', label: '', freq_mhz: 154, modulation: 'nfm', squelch_snr: null, incident: false, enabled: true, sort: 0 });
+	let cform = $state<Channel>({ id: 0, device_id: null, group: '', label: '', freq_mhz: 154, modulation: 'nfm', squelch_snr: null, ctcss: null, incident: false, enabled: true, sort: 0 });
 
 	async function load() {
 		try {
@@ -60,12 +60,13 @@
 		load();
 	}
 	function editChannel(c?: Channel) {
-		cform = c ? { ...c } : { id: 0, device_id: devices[0]?.id ?? null, group: channels[0]?.group ?? 'Fire/EMS', label: '', freq_mhz: 154, modulation: 'nfm', squelch_snr: null, incident: false, enabled: true, sort: channels.length };
+		cform = c ? { ...c } : { id: 0, device_id: devices[0]?.id ?? null, group: channels[0]?.group ?? 'Fire/EMS', label: '', freq_mhz: 154, modulation: 'nfm', squelch_snr: null, ctcss: null, incident: false, enabled: true, sort: channels.length };
 		chOpen = true;
 	}
 	async function saveChannel(e: SubmitEvent) {
 		e.preventDefault();
-		const body = { ...cform, freq_mhz: Number(cform.freq_mhz), squelch_snr: cform.squelch_snr === null || (cform.squelch_snr as unknown) === '' ? null : Number(cform.squelch_snr), device_id: cform.device_id ? Number(cform.device_id) : null };
+		const num = (v: unknown) => (v === null || v === '' || v === undefined ? null : Number(v));
+		const body = { ...cform, ctcss: num(cform.ctcss), freq_mhz: Number(cform.freq_mhz), squelch_snr: cform.squelch_snr === null || (cform.squelch_snr as unknown) === '' ? null : Number(cform.squelch_snr), device_id: cform.device_id ? Number(cform.device_id) : null };
 		try {
 			if (cform.id) await api.put(`/api/admin/radio/channels/${cform.id}`, body);
 			else await api.post('/api/admin/radio/channels', body);
@@ -91,7 +92,7 @@
 	}
 	async function seed() {
 		const r = await api.post<{ added: number }>('/api/admin/radio/seed');
-		toast.show(`Added ${r.added} starter channels (turned off). Verify each frequency before turning it on.`);
+		toast.show(`Added ${r.added} channels. The core set is on; press Apply when ready.`);
 		load();
 	}
 	async function apply() {
@@ -146,7 +147,7 @@
 			<div class="card-head">
 				<h2>Channels</h2>
 				<div class="row">
-					{#if !channels.length}<button class="btn secondary" onclick={seed}>Load starter list</button>{/if}
+					{#if !channels.length}<button class="btn secondary" onclick={seed}>Load Mormon Lake list</button>{/if}
 					<button class="btn secondary" onclick={() => editChannel()}><Plus size={18} strokeWidth={1.75} />Add</button>
 				</div>
 			</div>
@@ -157,14 +158,14 @@
 							<input type="checkbox" checked={c.enabled} aria-label={`${c.label} on`} onchange={(e) => quickToggle(c, (e.target as HTMLInputElement).checked)} />
 							<div class="grow">
 								<div>{c.label}{#if c.incident}<span class="chip warn" style="margin-left:8px">Alerts</span>{/if}</div>
-								<div class="small muted"><span class="data">{c.freq_mhz.toFixed(4)}</span> · {c.modulation.toUpperCase()} · {c.group} · {devName(c.device_id)}</div>
+								<div class="small muted"><span class="data">{c.freq_mhz.toFixed(4)}</span>{c.ctcss ? ` · tone ${c.ctcss}` : ''} · {c.modulation.toUpperCase()} · {c.group} · {devName(c.device_id)}</div>
 							</div>
 							<button class="btn text" onclick={() => editChannel(c)}>Edit</button>
 						</li>
 					{/each}
 				</ul>
 			{/if}
-			<p class="small muted" style="margin-top:12px">Starter frequencies come from an old public list. Check each on RadioReference (Coconino County) before turning it on.</p>
+			<p class="small muted" style="margin-top:12px">The Mormon Lake list was researched from RadioReference, the Forest Service communications guide and a local Broadcastify feed (sources in docs/RADIO.md). Twelve core channels start on. Sheriff channels may have gone digital: if they sound like data noise, turn them off.</p>
 		</section>
 
 		<section class="card stack">
@@ -208,6 +209,7 @@
 			<label class="field"><span>Frequency (MHz)</span><input type="number" step="0.0001" required bind:value={cform.freq_mhz} /></label>
 			<label class="field"><span>Modulation</span><select bind:value={cform.modulation}><option value="nfm">NFM (public safety)</option><option value="am">AM (aircraft)</option></select></label>
 			<label class="field"><span>Squelch dB (blank = default 9)</span><input type="number" step="0.5" bind:value={cform.squelch_snr} /></label>
+			<label class="field"><span>Tone / CTCSS Hz (blank = none)</span><input type="number" step="0.1" bind:value={cform.ctcss} placeholder="e.g. 114.8" /></label>
 			<label class="field"><span>Dongle</span><select bind:value={cform.device_id}>{#each devices as d (d.id)}<option value={d.id}>{d.name}</option>{/each}</select></label>
 		</div>
 		<label class="spread"><span>Busy alerts (fire, incidents)</span><input type="checkbox" bind:checked={cform.incident} /></label>

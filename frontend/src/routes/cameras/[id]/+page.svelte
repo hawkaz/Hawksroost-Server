@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import {
-		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Download, ZoomIn, ZoomOut
+		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Camera, Download, Play, Scissors, ZoomIn, ZoomOut
 	} from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
 	import LivePlayer from '#lib/components/LivePlayer.svelte';
+	import Sheet from '#lib/components/Sheet.svelte';
 	import { ago, cabinToday, dayTime, duration } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
@@ -93,7 +94,59 @@
 		{ cmd: 'Down', Icon: ArrowDown, cls: 'down' }
 	];
 	const LENS = { sub: 'Wide', main: 'Wide · full quality', tele: 'Zoom lens' } as const;
-	const time = (s: string) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+	// Recording times come from the camera's clock (cabin time) without a zone: read them as-is.
+	const hms = (s: string) => s.slice(11, 19);
+	const secs = (t: string) => {
+		const [h, m, x] = t.split(':').map(Number);
+		return h * 3600 + m * 60 + (x || 0);
+	};
+	function time(s: string) {
+		const [h, m] = s.slice(11, 16).split(':').map(Number);
+		return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+	}
+
+	// --- Clips ---
+	interface ClipJob { id: string; status: 'fetching' | 'cutting' | 'ready' | 'failed'; error: string | null; progress: number; size: number; url?: string }
+	let clipOpen = $state(false);
+	let clipRec = $state<Rec | null>(null);
+	let clipForm = $state({ start: '', length: 60, stream: 'sub' as 'sub' | 'main' });
+	let job = $state<ClipJob | null>(null);
+	let poll: ReturnType<typeof setInterval> | undefined;
+
+	function openClip(r: Rec) {
+		clipRec = r;
+		clipForm = { start: hms(r.start), length: 60, stream: 'sub' };
+		job = null;
+		clearInterval(poll);
+		clipOpen = true;
+	}
+	async function makeClip(e: SubmitEvent) {
+		e.preventDefault();
+		if (!clipRec) return;
+		let offset = secs(clipForm.start) - secs(hms(clipRec.start));
+		if (offset < 0) offset += 86400;
+		offset = Math.min(Math.max(0, offset), Math.max(0, clipRec.duration_s - 5));
+		try {
+			job = await api.post<ClipJob>(`/api/cameras/${id}/clips`, {
+				name: clipRec.name, start_id: clipRec.start_id, end_id: clipRec.end_id, stream: clipForm.stream,
+				offset_s: offset, length_s: clipForm.length, label: `${day}-${clipForm.start.replaceAll(':', '')}`
+			});
+			clearInterval(poll);
+			poll = setInterval(async () => {
+				if (!job || job.status === 'ready' || job.status === 'failed') return clearInterval(poll);
+				try {
+					job = await api.get<ClipJob>(`/api/cameras/clips/${job.id}/status`);
+				} catch (err) {
+					clearInterval(poll);
+					toast.error(err);
+				}
+			}, 2000);
+		} catch (err) {
+			toast.error(err);
+		}
+	}
+	$effect(() => () => clearInterval(poll));
+	const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
 </script>
 
 <div class="stack">
@@ -117,6 +170,9 @@
 				{#each Object.keys(cam.streams) as k (k)}
 					<button class="btn secondary" class:sel={lens === k} onclick={() => (lens = k as typeof lens)}>{LENS[k as keyof typeof LENS]}</button>
 				{/each}
+			</div>
+			<div class="row wrap">
+				<a class="btn secondary" href={`/api/cameras/${id}/snapshot?full=1&download=1`} download><Camera size={18} strokeWidth={1.75} />Save picture</a>
 			</div>
 			<p class="small muted">Full quality uses more of the cabin's internet. Use it only when you need detail.</p>
 		{/if}
@@ -191,18 +247,20 @@
 					<ul class="list">
 						{#each recs.files as r (r.name)}
 							<li>
-								<button class="grow plain" onclick={() => (playing = r)}>
-									<span class="data">{time(r.start)}</span>
+								<div class="grow">
+									<span class="data">{time(r.start)}–{time(r.end)}</span>
 									<span class="small muted"> · {duration(r.duration_s)}{r.triggers.length ? ` · ${r.triggers.join(', ')}` : ''}</span>
-								</button>
-								<a class="btn icon" href={fileUrl(r, 'main', true)} download aria-label="Download"><Download size={18} strokeWidth={1.75} /></a>
+								</div>
+								<button class="btn icon" aria-label="Play" onclick={() => (playing = r)}><Play size={18} strokeWidth={1.75} /></button>
+								<button class="btn secondary" onclick={() => openClip(r)}><Scissors size={16} strokeWidth={1.75} />Clip</button>
 							</li>
 						{/each}
 					</ul>
 				</section>
 			{:else}
-				<div class="card empty"><p>No recordings that day.</p><p>The camera's memory card keeps about a week or two.</p></div>
+				<div class="card empty"><p>No recordings that day.</p><p>The memory card keeps as much as fits, then records over the oldest.</p></div>
 			{/if}
+			<p class="small muted">Recordings are long files. Use <strong>Clip</strong> to watch or save just the minutes you want; it's much faster over the cabin's internet than downloading a whole file.</p>
 		{/if}
 	{/if}
 
@@ -212,7 +270,10 @@
 				{#each events as e (e.id)}
 					<div>
 						{#if e.snapshot}<img src={e.snapshot} alt={`${e.type} at ${dayTime(e.at)}`} class="snap" loading="lazy" />{/if}
-						<div class="small"><span class="chip">{e.type}</span> <span class="muted">{dayTime(e.at)} · {ago(e.at)}</span></div>
+						<div class="spread small">
+							<span><span class="chip">{e.type}</span> <span class="muted">{dayTime(e.at)} · {ago(e.at)}</span></span>
+							{#if e.snapshot}<a class="btn icon" href={`${e.snapshot}?download=1`} download aria-label="Save picture"><Download size={18} strokeWidth={1.75} /></a>{/if}
+						</div>
 					</div>
 				{/each}
 			</div>
@@ -222,7 +283,56 @@
 	{/if}
 </div>
 
+<Sheet bind:open={clipOpen} title="Make a clip">
+	{#if clipRec}
+		{#if !job || job.status === 'failed'}
+			<form class="stack" onsubmit={makeClip}>
+				<p class="small muted">From the recording {time(clipRec.start)}–{time(clipRec.end)} on {day}.</p>
+				<div class="grid grid-2">
+					<label class="field"><span>Start at</span><input type="time" step="1" required bind:value={clipForm.start} min={hms(clipRec.start)} max={hms(clipRec.end)} /></label>
+					<label class="field"><span>Length</span>
+						<select bind:value={clipForm.length}>
+							<option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={120}>2 minutes</option>
+							<option value={300}>5 minutes</option><option value={600}>10 minutes</option>
+						</select>
+					</label>
+				</div>
+				<div class="pill-tabs">
+					<button type="button" class:on={clipForm.stream === 'sub'} onclick={() => (clipForm.stream = 'sub')}>Small</button>
+					<button type="button" class:on={clipForm.stream === 'main'} onclick={() => (clipForm.stream = 'main')}>Full quality</button>
+				</div>
+				{#if job?.status === 'failed'}<p class="notice danger">{job.error}</p>{/if}
+				<button class="btn">Make clip</button>
+			</form>
+		{:else if job.status === 'ready' && job.url}
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video src={job.url} controls autoplay playsinline style="width:100%;border-radius:6px;background:#000"></video>
+			<div class="spread">
+				<span class="small muted">{mb(job.size)}</span>
+				<a class="btn" href={`${job.url}?download=1`} download><Download size={18} strokeWidth={1.75} />Save clip</a>
+			</div>
+			<p class="small muted">Clips are kept on the cabin laptop for 2 hours.</p>
+		{:else}
+			<p>{job.status === 'fetching' ? `Getting the recording from the camera… ${Math.round(job.progress * 100)}%` : 'Cutting the clip…'}</p>
+			<div class="meter"><i style="width:{job.status === 'cutting' ? 100 : Math.round(job.progress * 100)}%"></i></div>
+			<p class="small muted">The camera is on a slow connection, so a long or full-quality recording can take a few minutes. You can leave this open.</p>
+		{/if}
+	{/if}
+</Sheet>
+
 <style>
+	.meter {
+		height: 6px;
+		background: var(--line);
+		border-radius: 999px;
+		overflow: hidden;
+	}
+	.meter i {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+		transition: width 0.4s;
+	}
 	.btn.sel {
 		border-color: var(--accent);
 		color: var(--accent);

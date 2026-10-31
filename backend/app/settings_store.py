@@ -15,6 +15,8 @@ SECTIONS: dict[str, dict[str, Any]] = {
         "site_name": "Hawksroost",
         "public_url": "",          # e.g. https://hawksroost.live — used in links, emails, OAuth
         "units": "imperial",       # imperial | metric
+        "login_photo": "",         # content type of data/branding/login-photo, "" = none
+        "login_photo_v": 0,        # bumps on each upload so browsers refetch
     },
     "google": {
         "enabled": False,

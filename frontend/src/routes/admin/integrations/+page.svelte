@@ -2,6 +2,7 @@
 	import { Copy, Plus } from '@lucide/svelte';
 	import { api } from '#lib/api.ts';
 	import AdminNav from '#lib/components/admin/AdminNav.svelte';
+	import LoginPhoto from '#lib/components/admin/LoginPhoto.svelte';
 	import SettingsForm, { type Field } from '#lib/components/admin/SettingsForm.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import { ago } from '#lib/format.ts';
@@ -159,6 +160,8 @@
 
 		<SettingsForm section="general" title="General" fields={F.general} bind:values={s.general} />
 
+		<LoginPhoto />
+
 		<SettingsForm section="tempest" title="Tempest weather" fields={F.tempest} bind:values={s.tempest}>
 			{#snippet intro()}
 				<p class="small muted">Live readings come straight from the hub on the cabin network — nothing to fill in. {#if Object.keys(tempestSeen).length}Heard on the network: <span class="data">{Object.keys(tempestSeen).join(', ')}</span>{:else}No Tempest heard yet.{/if}</p>
@@ -188,7 +191,7 @@
 		<SettingsForm section="alerts" title="Camera alerts" fields={F.alerts} bind:values={s.alerts} />
 
 		<SettingsForm section="backup" title="Backups" fields={F.backup} bind:values={s.backup}>
-			{#snippet intro()}<p class="small muted">Copies go to the laptop's data/backups folder. The optional off-site copy to OneDrive is set up on the server (see the deploy guide).</p>{/snippet}
+			{#snippet intro()}<p class="small muted">Copies go to the laptop's data/backups folder.</p>{/snippet}
 			{#snippet actions()}<button type="button" class="btn secondary" onclick={backupNow}>Back up now</button>{/snippet}
 		</SettingsForm>
 	{/if}

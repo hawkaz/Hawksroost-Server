@@ -24,7 +24,7 @@ if ! grep -q '^CLOUDFLARE_TUNNEL_TOKEN=.\+' .env; then
   echo "OK: token saved to .env"
 fi
 
-mkdir -p data/go2rtc data/radio/recordings data/backups data/rclone
+mkdir -p data/go2rtc data/radio/recordings data/backups data/branding
 
 echo "== Building and starting (first time takes a few minutes)"
 docker compose up -d --build

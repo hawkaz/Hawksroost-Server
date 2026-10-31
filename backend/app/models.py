@@ -260,6 +260,7 @@ class RadioChannel(Base):
     freq_mhz: Mapped[float] = mapped_column(Float)
     modulation: Mapped[str] = mapped_column(String(8), default="nfm")
     squelch_snr: Mapped[float | None] = mapped_column(Float)
+    ctcss: Mapped[float | None] = mapped_column(Float)  # repeater tone (Hz); None = carrier squelch
     incident: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     sort: Mapped[int] = mapped_column(Integer, default=0)

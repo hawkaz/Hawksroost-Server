@@ -35,3 +35,27 @@ def test_parse_names():
     b = parse_name("dev1_20260714_120501_171.425.mp3.tmp")
     assert b["in_progress"] and b["freq_mhz"] == 171.425
     assert parse_name("random.mp3") is None
+
+
+def test_ctcss_rendering():
+    dev = RadioDevice(id=1, name="D", mode="auto", gain=30, correction=0, index=0, live_stream=False)
+    scan = chans(155.6175, 172.3)
+    scan[0].ctcss = 162.2
+    text = render_airband([plan_device(dev, scan)], "pw")
+    assert "ctcss = (162.2, 0.0);" in text
+    multi = chans(155.0175, 155.835)
+    multi[1].ctcss = 114.8
+    text = render_airband([plan_device(dev, multi)], "pw")
+    assert text.count("ctcss = 114.8;") == 1
+
+
+def test_seed_loads_core_scan(client):
+    from .conftest import login
+    login(client, "admin")
+    assert client.post("/api/admin/radio/seed").json()["added"] > 20
+    r = client.get("/api/admin/radio").json()
+    on = [c for c in r["channels"] if c["enabled"]]
+    assert any(c["label"].startswith("Mormon Lake FD") and c["incident"] and c["ctcss"] == 162.2 for c in on)
+    client.put("/api/admin/settings/radio", json={"enabled": True})
+    plan = client.post("/api/admin/radio/apply").json()
+    assert not plan["errors"] and plan["devices"][0]["mode"] == "scan"
