@@ -25,7 +25,7 @@ if ! grep -q '^CLOUDFLARE_API_TOKEN=.\+' .env; then
 fi
 
 echo "== Firewall: allow HTTPS from the internet (needs your sudo password)"
-sudo ufw allow 80/tcp comment 'Caddy (Let'"'"'s Encrypt + redirect)' >/dev/null
+sudo ufw allow 80/tcp comment 'Caddy HTTP - certificates and redirect' >/dev/null
 sudo ufw allow 443/tcp comment 'Caddy HTTPS' >/dev/null
 echo "OK: ports 80 and 443 open on the laptop"
 
