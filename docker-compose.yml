@@ -1,0 +1,106 @@
+# Hawksroost Cabin Hub. Run from /opt/hawksroost:  docker compose up -d --build
+# Integrations (cameras, Tempest, Starlink, email, Google, radio) are set up in
+# the app under Settings — not here. Only the Cloudflare token lives in .env.
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+  labels:
+    # Watchtower runs on this host; updates here are deliberate (git pull + build).
+    - "com.centurylinklabs.watchtower.enable=false"
+
+services:
+  api:
+    <<: *common
+    build: ./backend
+    image: hawksroost-api
+    environment:
+      TZ: ${TZ:-America/Phoenix}
+      HAWK_PUBLIC_URL: ${HAWK_PUBLIC_URL:-}
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ping', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # Tempest (UDP broadcast) + Starlink poller. Host network so LAN broadcasts arrive.
+  collector:
+    <<: *common
+    image: hawksroost-api
+    command: ["python", "-m", "app.collector"]
+    network_mode: host
+    environment:
+      TZ: ${TZ:-America/Phoenix}
+    volumes:
+      - ./data:/data
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    <<: *common
+    build: ./frontend
+    image: hawksroost-web
+    ports:
+      # LAN access (http://<laptop-ip>:8080) — handy for setup and when Starlink is down.
+      - "${HAWK_LAN_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_healthy }
+
+  go2rtc:
+    <<: *common
+    image: alexxit/go2rtc:1.9.15
+    # Streams are added by the app at runtime and saved in data/go2rtc.
+    command: ["go2rtc", "-config", "/config/go2rtc.yaml", "-config", '{"rtsp":{"listen":""},"webrtc":{"listen":""},"log":{"level":"warn"}}']
+    volumes:
+      - ./data/go2rtc:/config
+
+  cloudflared:
+    <<: *common
+    image: cloudflare/cloudflared:2026.10.0
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on: [web]
+
+  # --- Optional: off-site backup copy (COMPOSE_PROFILES=offsite) -----------------------
+  offsite:
+    <<: *common
+    image: rclone/rclone:1.71
+    profiles: ["offsite"]
+    entrypoint: ["/bin/sh", "/deploy/offsite.sh"]
+    environment:
+      RCLONE_REMOTE: ${RCLONE_REMOTE:-onedrive:Hawksroost}
+    volumes:
+      - ./data/backups:/backups:ro
+      - ./data/rclone:/config/rclone
+      - ./deploy/offsite.sh:/deploy/offsite.sh:ro
+
+  # --- Optional: radio scanner (COMPOSE_PROFILES=radio) --------------------------------
+  airband:
+    <<: *common
+    image: ghcr.io/rtl-airband/rtlsdr-airband:v5.2.0
+    profiles: ["radio"]
+    entrypoint: ["/usr/bin/tini", "--", "/bin/sh", "/deploy/run-airband.sh"]
+    environment:
+      TZ: ${TZ:-America/Phoenix}
+    device_cgroup_rules:
+      - "c 189:* rwm"   # USB devices (the RTL-SDR)
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - ./data/radio:/config:ro
+      - ./data/radio/recordings:/recordings
+      - ./deploy/radio/run-airband.sh:/deploy/run-airband.sh:ro
+    depends_on: [icecast]
+
+  icecast:
+    <<: *common
+    build: ./deploy/icecast
+    image: hawksroost-icecast
+    profiles: ["radio"]
+    volumes:
+      - ./data/radio:/config:ro
