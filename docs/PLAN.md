@@ -8,7 +8,7 @@ How to install and run: [DEPLOY.md](DEPLOY.md). Radio hardware: [RADIO.md](RADIO
 
 **All phases are built and tested in a container.** Nothing has run on the real
 laptop or devices yet. Next needs Chris: deploy key + clone, then the laptop
-inventory ([DEPLOY.md](DEPLOY.md) steps 1–3).
+survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md)).
 
 | Phase | State | Verified on real hardware? |
 |---|---|---|
@@ -84,7 +84,7 @@ except where noted.
 
 | Question | Needed by |
 |---|---|
-| Laptop inventory output | Install |
+| Server survey output → server prep (updates, power-on after outage, sleep, Docker, cleanup) | Install |
 | Camera probe output | Camera |
 | Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
 | Delete old branches + set `main` default in GitHub | Any time (Chris) |

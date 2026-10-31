@@ -7,17 +7,26 @@ channels, sign-in photo) are set up in the app afterwards, under
 
 ## Overview
 
-1. Give the laptop read-only access to the private GitHub repo (a deploy key).
-2. Put the code in `/opt/hawksroost`.
-3. Check the laptop (read-only script).
-4. Battery charge limit in the Dell BIOS.
-5. Create the Cloudflare tunnel; copy its token.
-6. Run the installer (asks for the token, builds, starts).
-7. Make the first admin account.
-8. In the app: add the camera, check Tempest and Starlink, set up email and Google.
-9. Last: the radio.
+1. **Survey the laptop** (read-only `server-check.sh`) and send Claude the output.
+2. **Prepare the server** from that survey — Claude gives the exact steps: OS
+   updates, automatic security updates, never sleep (lid closed is fine), clean
+   shutdown on low battery, BIOS power-on when AC returns + battery charge
+   limit, Docker ready, unneeded containers removed.
+3. Deploy key, then put the code in `/opt/hawksroost`.
+4. Cloudflare tunnel; run the installer.
+5. First admin account.
+6. Integrations in the app (camera, Tempest, Starlink, email, Google).
+7. Power-loss test: pull the plug, let it come back, check everything restarts.
+8. Last: the radio.
 
----
+## 0. Survey (before anything else)
+
+The code isn't on the laptop yet, so the first time the survey script is pasted
+in (Claude provides the block). Afterwards it lives at:
+
+```bash
+bash /opt/hawksroost/scripts/server-check.sh | tee ~/server-check.txt
+```
 
 ## 1. Deploy key (read-only access to the private repo)
 
@@ -58,21 +67,13 @@ GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" git clone -b main git@
 
 Success ends with `Resolving deltas: 100%`. `Permission denied (publickey)` means the deploy key isn't added yet.
 
-## 3. Check the laptop
+## Power, sleep and updates
 
-Read-only; changes nothing; takes about 2 minutes (it listens 70 seconds for the Tempest hub):
-
-```bash
-bash /opt/hawksroost/scripts/inventory.sh
-```
-
-Paste the output back to Claude.
-
-## 4. Battery charge limit
-
-An always-plugged-in laptop battery swells if it sits at 100%. In the Dell BIOS
-(F2 at boot): **Power → Primary Battery Charge Configuration → Primarily AC use**
-(or Custom, 50–80%). Menu names vary by model.
+Covered in the server-prep step Claude gives after the survey: BIOS **Wake on
+AC** (power on when power returns) and **Primarily AC use** charge limit;
+no suspend on lid close or idle; clean shutdown at low battery; automatic
+security updates with a night-time reboot window. Docker and every app
+container start by themselves at boot.
 
 ## 5. Cloudflare tunnel
 

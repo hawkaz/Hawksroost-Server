@@ -162,7 +162,7 @@ frontend/src/        routes/ (one folder per page), lib/ (api, session, format,
                      push, components), service-worker.ts, app.css (brand tokens)
 frontend/nginx.conf  front door: routing + auth guard for video/radio
 deploy/              radio recorder wrapper, icecast image
-scripts/             inventory, install, update, admin-invite, radio-on/preflight
+scripts/             server-check, install, update, admin-invite, radio-on/preflight
 data/                server-only runtime data (gitignored)
 ```
 
