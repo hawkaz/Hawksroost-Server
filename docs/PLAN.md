@@ -98,7 +98,7 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 
 | Question | Needed by |
 |---|---|
-| Run server prep, BIOS Wake on AC, power-loss test | Install |
+| Power-loss test (skipped by Chris 2026-10-31; Wake on AC set in BIOS, untested) | Optional |
 | Camera probe output | Camera |
 | Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
 | Delete old branches + set `main` default in GitHub | Any time (Chris) |
@@ -136,3 +136,6 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   domain steps; OpenWebRX removal step.
 - 2026-10-31 — Researched Mormon Lake analog channels (32 loaded, 12 on by
   default, scan mode); added per-channel CTCSS tone (migration 0002).
+- 2026-10-31 — Laptop prepared: survey, deploy key + clone to /opt/hawksroost,
+  server-prep.sh run (all OK), UPower boot service verified after reboot,
+  BIOS Wake on AC set. Power-loss test skipped.
