@@ -88,7 +88,9 @@ ok "UDP 50222 allowed from $SUBNET (Tempest)"
 
 # --- 5. Old containers and data ------------------------------------------------------
 step "Old containers and data"
-if docker rm -f hawksroost-airband >/dev/null 2>&1; then ok "removed old test recorder container"; else ok "old test recorder already gone"; fi
+# (docker rm -f succeeds even when the container is missing, so check first.)
+exists() { docker container inspect "$1" >/dev/null 2>&1; }
+if exists hawksroost-airband; then docker rm -f hawksroost-airband >/dev/null; ok "removed old test recorder container"; fi
 if [ -d "$OLD_REPO" ]; then
   rm -rf "$OLD_REPO"
   ok "removed $OLD_REPO (old NOAA test recordings)"
@@ -119,7 +121,7 @@ EOF
   ok "~/Docker/docker-compose.yml now has Home Assistant + Watchtower (backup saved beside it)"
 fi
 for c in owrx nginx-proxy-manager portainer; do
-  if docker rm -f "$c" >/dev/null 2>&1; then ok "removed container $c"; fi
+  if exists "$c"; then docker rm -f "$c" >/dev/null; ok "removed container $c"; fi
 done
 for v in docker_nginx_data docker_nginx_letsencrypt docker_portainer_data docker_openwebrx_settings portainer_data; do
   if docker volume rm "$v" >/dev/null 2>&1; then ok "removed volume $v"; fi
