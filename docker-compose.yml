@@ -17,6 +17,7 @@ services:
     <<: *common
     build: ./backend
     image: hawksroost-api
+    pull_policy: build   # built on the laptop, never downloaded
     environment:
       TZ: ${TZ:-America/Phoenix}
       HAWK_PUBLIC_URL: ${HAWK_PUBLIC_URL:-}
@@ -33,6 +34,7 @@ services:
   collector:
     <<: *common
     image: hawksroost-api
+    pull_policy: never   # uses the image the api service builds
     command: ["python", "-m", "app.collector"]
     network_mode: host
     environment:
@@ -46,6 +48,7 @@ services:
     <<: *common
     build: ./frontend
     image: hawksroost-web
+    pull_policy: build
     ports:
       # LAN access (http://<laptop-ip>:8080) — handy for setup and when Starlink is down.
       - "${HAWK_LAN_PORT:-8080}:80"
@@ -110,6 +113,7 @@ services:
     <<: *common
     build: ./deploy/icecast
     image: hawksroost-icecast
+    pull_policy: build
     profiles: ["radio"]
     volumes:
       - ./data/radio:/config:ro
