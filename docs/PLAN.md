@@ -26,14 +26,14 @@ survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md))
 |---|---|---|---|
 | D1 | Stack | Python (FastAPI) + SvelteKit PWA + SQLite | 2026-10-31 |
 | D2 | Argus Solar | Skip for now; keep using the Reolink app | 2026-10-31 |
-| D3 | Remote access | Cloudflare Tunnel for everything, video included (risk accepted) | 2026-10-31 |
+| D3 | Remote access | ~~Cloudflare Tunnel~~ → **direct**: Starlink Local Priority public IP, router forwards 80/443, Caddy + Let's Encrypt, Cloudflare DNS-only + DDNS updater. Also serves Home Assistant at ha.hawksroost.live | 2026-10-31 |
 | D4 | Radio hardware | One dongle now; built so more dongles are added in the app | 2026-10-31 |
 | D5 | P25 | Not planned | 2026-10-31 |
 | D7 | Domain | hawksroost.live on Cloudflare DNS | 2026-10-31 |
 | D8 | Roles | viewer / member / admin (see below) | 2026-10-31 |
 | — | Bookings | Open booking; overlapping stays allowed but flagged | 2026-10-31 |
 | — | Email | Brevo (SMTP), configured in the app | 2026-10-31 |
-| — | Integrations | All set up in the admin UI, not in files. `.env` holds only the tunnel token and a few server options | 2026-10-31 |
+| — | Integrations | All set up in the admin UI, not in files. `.env` holds only the Cloudflare DNS token and a few server options | 2026-10-31 |
 | — | Backups | Nightly local SQLite copies only; no off-site | 2026-10-31 |
 | — | Git | Everything on `main`, no branches | 2026-10-31 |
 | — | Build order | Radio last | 2026-10-31 |
@@ -47,8 +47,11 @@ survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md))
 | Pan/tilt the camera, go to presets | | ✓ | ✓ |
 | Auto-tracking, settings, integrations, people, invites, others' bookings | | | ✓ |
 
-**D3 mitigations:** sub-stream by default, full quality only on tap, live view
-pauses after 5 minutes, no prefetching, video isolated under `/video/`.
+**Why D3 changed:** the brief assumed Starlink CGNAT. Chris has Local Priority
+with a public IP, so a direct front door removes the Cloudflare video-policy
+problem and the tunnel dependency. Starlink's public IP is reserved but not
+static, hence the DDNS updater. Video volume is still kept low for Starlink's
+upload: sub-stream default, full quality on tap, 5-minute live pause.
 
 ## Chris's answers (2026-10-31)
 
@@ -106,15 +109,17 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 ## Architecture
 
 ```
- Family phones / PCs ──HTTPS──► Cloudflare ──tunnel (outbound only)──┐
-                                                                     ▼
+ Family phones / PCs ──HTTPS──► hawksroost.live (DNS-only, kept current by ddns)
+                                  │  Starlink public IP → own router → TCP 80/443
 ┌──────────────── Dell Latitude · Debian · Docker Compose ─────────────────────┐
-│  cloudflared ──► web (nginx: app files; /api → api; /video → go2rtc;        │
-│                       /radio/live → icecast; video+radio need a session)     │
+│  caddy (host network, Let's Encrypt) ──► web :8080 (nginx: app files;        │
+│        /api → api; /video → go2rtc; /radio/live → icecast; session guard)    │
+│        └─► ha.hawksroost.live → Home Assistant :8123                         │
 │  api (FastAPI, 1 worker): auth, roles, push, calendar, lists, cameras,       │
-│       radio indexer, nightly backup ── SQLite in data/                       │
+│       clips (ffmpeg), radio indexer, nightly backup ── SQLite in data/       │
 │  collector (host network): Tempest UDP 50222, Starlink gRPC                  │
 │  go2rtc: camera RTSP → MSE/HLS (streams registered by the api)               │
+│  ddns: Cloudflare DNS records → current public IP                            │
 │  optional: airband + icecast (radio)                                         │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -139,3 +144,6 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 - 2026-10-31 — Laptop prepared: survey, deploy key + clone to /opt/hawksroost,
   server-prep.sh run (all OK), UPower boot service verified after reboot,
   BIOS Wake on AC set. Power-loss test skipped.
+- 2026-10-31 — Switched the front door from Cloudflare Tunnel to direct
+  (Caddy + Let's Encrypt + Cloudflare DDNS) after Chris confirmed a Starlink
+  public IP; Home Assistant served at ha.hawksroost.live.

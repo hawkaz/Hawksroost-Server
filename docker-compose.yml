@@ -1,6 +1,7 @@
 # Hawksroost Cabin Hub. Run from /opt/hawksroost:  docker compose up -d --build
 # Integrations (cameras, Tempest, Starlink, email, Google, radio) are set up in
-# the app under Settings — not here. Only the Cloudflare token lives in .env.
+# the app under Settings — not here. .env holds only server options and the
+# Cloudflare DNS token used to keep hawksroost.live pointed at this laptop.
 
 x-common: &common
   restart: unless-stopped
@@ -59,13 +60,35 @@ services:
     volumes:
       - ./data/go2rtc:/config
 
-  cloudflared:
+  # Front door: HTTPS for hawksroost.live (and Home Assistant) with automatic
+  # Let's Encrypt certificates. The router forwards TCP 80/443 here.
+  caddy:
     <<: *common
-    image: cloudflare/cloudflared:2026.10.0
-    command: ["tunnel", "--no-autoupdate", "run"]
+    image: caddy:2.10.2-alpine
+    network_mode: host
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}   # set in .env; the tunnel retries until it is
+      HAWK_DOMAIN: ${HAWK_DOMAIN:-hawksroost.live}
+      HA_DOMAIN: ${HA_DOMAIN:-ha.hawksroost.live}
+      HAWK_LAN_PORT: ${HAWK_LAN_PORT:-8080}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
     depends_on: [web]
+
+  # Keeps the DNS records pointed at Starlink's public IP if it ever changes.
+  ddns:
+    <<: *common
+    image: favonia/cloudflare-ddns:1.15.1
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [all]
+    security_opt: [no-new-privileges:true]
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      DOMAINS: ${HAWK_DOMAIN:-hawksroost.live},${HA_DOMAIN:-ha.hawksroost.live}
+      PROXIED: "false"
+      IP6_PROVIDER: none
 
   # --- Optional: radio scanner (COMPOSE_PROFILES=radio) --------------------------------
   airband:

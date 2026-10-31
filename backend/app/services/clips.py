@@ -1,10 +1,10 @@
 """Short clips cut from the camera's long SD-card recordings.
 
 The camera records 24/7 into long files. Downloading a whole one over
-Starlink + Cloudflare is slow, so the laptop fetches the file from the camera
-over the LAN, cuts out just the part asked for with ffmpeg (no re-encoding),
-and serves that. Jobs run in the background because Cloudflare cuts off
-requests that take longer than ~100 s.
+Starlink is slow, so the laptop fetches the file from the camera over the
+LAN, cuts out just the part asked for with ffmpeg (no re-encoding), and
+serves that. Jobs run in the background so a slow fetch never ties up a
+request (or trips a phone's network timeout).
 """
 import asyncio
 import logging

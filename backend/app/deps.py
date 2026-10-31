@@ -32,8 +32,11 @@ admin = require("admin")
 
 
 def client_ip(request: Request) -> str:
+    """The visitor's address. Caddy sets X-Forwarded-For (it ignores any value
+    the visitor sent), so its first entry is the real client."""
+    forwarded = request.headers.get("x-forwarded-for", "")
     return (
-        request.headers.get("cf-connecting-ip")
+        forwarded.split(",")[0].strip()
         or request.headers.get("x-real-ip")
         or (request.client.host if request.client else "unknown")
     )

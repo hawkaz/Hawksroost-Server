@@ -13,7 +13,7 @@ channels, sign-in photo) are set up in the app afterwards, under
    shutdown on low battery, BIOS power-on when AC returns + battery charge
    limit, Docker ready, unneeded containers removed.
 3. Deploy key, then put the code in `/opt/hawksroost`.
-4. Cloudflare tunnel; run the installer.
+4. Front door: router port forward, Cloudflare DNS token, Home Assistant proxy setting; run the installer.
 5. First admin account.
 6. Integrations in the app (camera, Tempest, Starlink, email, Google).
 7. Power-loss test: pull the plug, let it come back, check everything restarts.
@@ -88,19 +88,28 @@ Then, at the laptop: **BIOS (F2) → Power Management → AC Behavior → Wake o
 Power-loss test: unplug the laptop and the router, wait, plug both back in.
 Everything should come back by itself within a few minutes.
 
-## 3. Cloudflare tunnel
+## 3. Front door (Starlink public IP → laptop)
 
-In the Cloudflare dashboard (hawksroost.live is on Cloudflare DNS):
+Starlink Local Priority with the public IP option, Starlink router in bypass
+mode, your own router at 192.168.67.1. Caddy on the laptop serves HTTPS with
+automatic Let's Encrypt certificates; a small updater keeps the DNS records
+pointed at the public IP (Starlink reserves it, but it can change after a
+relocation or software update).
 
-1. **Zero Trust → Networks → Tunnels** (some accounts show **Networks → Connectors**) → **Create a tunnel** → **Cloudflared**.
-2. Name it `hawksroost`. On the install screen pick **Docker**; the command shown ends in a long token after `--token`. Copy just the token.
-3. Add a **public hostname / published application route**: subdomain blank, domain `hawksroost.live`, service type **HTTP**, URL `web:80`.
-
-Menu names change often; what matters is the token and the route to `http://web:80`.
+1. **Router — fixed address:** reserve `192.168.67.101` for the laptop's Ethernet (DHCP reservation).
+2. **Router — port forwarding:** TCP **80** and TCP **443** → `192.168.67.101` (same ports).
+3. **Cloudflare — API token:** My Profile → **API Tokens → Create Token → "Edit zone DNS"** template →
+   Zone Resources: *Include → Specific zone → hawksroost.live* → Create. Copy the token (the installer asks for it).
+4. **Cloudflare — DNS:** nothing to add by hand. The updater creates `hawksroost.live` and
+   `ha.hawksroost.live` as **DNS only** (grey cloud). Delete any old record for those two names
+   that points somewhere else (e.g. an old tunnel CNAME).
+5. **Home Assistant:** it must trust Caddy, or it answers "400: Bad Request". Claude gives the exact
+   lines for `~/Docker/homeassistant/config/configuration.yaml` after seeing the current file.
 
 ## 4. Install
 
-Asks for the token (paste, Enter — it won't show), builds, and starts everything:
+Asks for the Cloudflare API token (paste, Enter — it won't show), opens ports
+80/443 in the firewall (asks for your sudo password), builds, and starts everything:
 
 ```bash
 cd /opt/hawksroost && bash scripts/install.sh
@@ -217,7 +226,8 @@ Hardware notes: [RADIO.md](RADIO.md).
 | Status | `cd /opt/hawksroost && docker compose ps` |
 | App logs | `cd /opt/hawksroost && docker compose logs --tail=50 api` |
 | Weather/Starlink logs | `cd /opt/hawksroost && docker compose logs --tail=50 collector` |
-| Tunnel logs | `cd /opt/hawksroost && docker compose logs --tail=20 cloudflared` |
+| HTTPS / certificate logs | `cd /opt/hawksroost && docker compose logs --tail=30 caddy` |
+| DNS updater logs | `cd /opt/hawksroost && docker compose logs --tail=20 ddns` |
 | Restart everything | `cd /opt/hawksroost && docker compose restart` |
 | Admin invite link | `bash /opt/hawksroost/scripts/admin-invite.sh` |
 | Password reset link | `cd /opt/hawksroost && docker compose exec api python -m app.cli reset-link someone@example.com` |

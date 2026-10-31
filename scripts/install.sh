@@ -15,16 +15,27 @@ if [ ! -f .env ]; then
   echo "== Created .env"
 fi
 
-if ! grep -q '^CLOUDFLARE_TUNNEL_TOKEN=.\+' .env; then
+if ! grep -q '^CLOUDFLARE_API_TOKEN=.\+' .env; then
   echo
-  echo "Paste the Cloudflare tunnel token, then press Enter (it won't show on screen):"
+  echo "Paste the Cloudflare API token (Edit zone DNS), then press Enter (it won't show on screen):"
   read -rs token
   [ -n "$token" ] || { echo "FAIL: no token entered"; exit 1; }
-  sed -i "s|^CLOUDFLARE_TUNNEL_TOKEN=.*|CLOUDFLARE_TUNNEL_TOKEN=$token|" .env
+  sed -i "s|^CLOUDFLARE_API_TOKEN=.*|CLOUDFLARE_API_TOKEN=$token|" .env
   echo "OK: token saved to .env"
 fi
 
-mkdir -p data/go2rtc data/radio/recordings data/backups data/branding
+echo "== Firewall: allow HTTPS from the internet (needs your sudo password)"
+sudo ufw allow 80/tcp comment 'Caddy (Let'"'"'s Encrypt + redirect)' >/dev/null
+sudo ufw allow 443/tcp comment 'Caddy HTTPS' >/dev/null
+echo "OK: ports 80 and 443 open on the laptop"
+
+for p in 80 443; do
+  if ss -tlnH "sport = :$p" | grep -q . && ! docker ps --format '{{.Names}}' | grep -q -- '-caddy-'; then
+    echo "FAIL: something else is already using port $p:"; ss -tlnpH "sport = :$p"; exit 1
+  fi
+done
+
+mkdir -p data/go2rtc data/radio/recordings data/backups data/branding data/caddy/data data/caddy/config
 
 echo "== Building and starting (first time takes a few minutes)"
 docker compose up -d --build

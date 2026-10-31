@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Live video through go2rtc (MSE, falling back to HLS, then still frames).
 	// Stops by itself after a few minutes so the cabin's Starlink upload isn't
-	// used by a forgotten tab — and to keep video traffic through Cloudflare small.
+	// used by a forgotten tab.
 	import { Play } from '@lucide/svelte';
 
 	let { stream, name, idleMinutes = 5 }: { stream: string; name: string; idleMinutes?: number } = $props();

@@ -1,0 +1,20 @@
+# Front door from the internet. Caddy gets and renews the Let's Encrypt
+# certificates by itself; the router forwards TCP 80 and 443 to this laptop.
+# Runs on the host network so it can reach the app (LAN port) and Home Assistant.
+{
+	# UDP 443 isn't forwarded, so no HTTP/3.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$HAWK_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:{$HAWK_LAN_PORT} {
+		flush_interval -1  # live radio, clips and video stream without buffering
+	}
+}
+
+{$HA_DOMAIN} {
+	reverse_proxy 127.0.0.1:8123
+}
