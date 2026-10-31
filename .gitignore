@@ -1,20 +1,25 @@
-# Recordings — audio piles up fast; never commit it
-/recordings/*
-!/recordings/.gitkeep
-
-# Local env / secrets
+# Local env / secrets — never commit
 .env
 *.local
 *.secret
 
-# rdio-scanner data (Step 2)
-/rdio-scanner/data/
+# Runtime data on the server (DB, snapshots, backups, recordings)
+/data/
+/sdr/recordings/*
+!/sdr/recordings/.gitkeep
+/sdr/rdio-scanner/data/
 
-# Python (incident service, Step 4)
+# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+build/
 
 # Editor / OS cruft
 .DS_Store
