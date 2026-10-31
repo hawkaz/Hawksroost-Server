@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HawkAZ — Brand Guide</title>
+<link rel="icon" href="svg/favicon-hawk-navy.svg">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,400;0,600;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --copper:#B0603A; --sunset:#C0442E; --gold:#E0A03C;
+    --navy:#1F3A5F; --cream:#F7EFDF; --sand:#F4EDE1; --ink:#2A2622;
+    --stone:#8A7A63; --line:#E2D6C1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--sand);color:var(--ink);font-family:Bitter,Georgia,serif;font-size:16px;line-height:1.6}
+  a{color:var(--navy)} a:hover{color:var(--copper)}
+  .wrap{max-width:920px;margin:0 auto;padding:72px 32px 120px;display:flex;flex-direction:column;gap:64px}
+  .mono{font-family:'IBM Plex Mono',Menlo,monospace}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone)}
+  h1{font-size:52px;font-weight:800;line-height:1.05;letter-spacing:-.015em;margin:8px 0 0}
+  h2{font-size:26px;font-weight:800;margin:0 0 4px}
+  h3{font-size:15px;font-weight:800;margin:0}
+  p{margin:0;text-wrap:pretty;max-width:68ch;color:#4A4238}
+  section{display:flex;flex-direction:column;gap:20px}
+  .card{background:#FCF8F0;border:1px solid var(--line);border-radius:4px;padding:26px}
+  .grid{display:grid;gap:16px}
+  .swatch{border-radius:3px;padding:16px;min-height:120px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--stone);font-weight:500}
+  td.mono{font-size:12.5px}
+  pre{margin:0;background:var(--ink);color:#E9DFCB;padding:20px;border-radius:4px;overflow:auto;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.7}
+  .rules{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .rule{border-left:0;background:#FCF8F0;border:1px solid var(--line);border-radius:4px;padding:18px 20px}
+  .rule ul{margin:8px 0 0;padding-left:18px;font-size:14.5px;color:#4A4238}
+  .rule li{margin-bottom:6px}
+  .yes h3{color:#3F6B4A} .no h3{color:var(--sunset)}
+  figure{margin:0;display:flex;flex-direction:column;gap:10px}
+  figcaption{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--stone)}
+  .checker{background:
+    linear-gradient(45deg,#E4DACA 25%,transparent 25%,transparent 75%,#E4DACA 75%),
+    linear-gradient(45deg,#E4DACA 25%,transparent 25%,transparent 75%,#E4DACA 75%);
+    background-size:16px 16px;background-position:0 0,8px 8px;background-color:#F7F2E8}
+  img{display:block;max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Brand guide &middot; v1 &middot; personal / family use</div>
+    <h1>HawkAZ</h1>
+    <p style="margin-top:14px;font-size:17px">Personal domain identity for the Hawk family in Arizona. The mark is a hawk in flight over the Arizona state silhouette; the wordmark splits the name in two tones so &ldquo;AZ&rdquo; reads as the place. Primary domain <span class="mono">hawkaz.net</span>, reserve <span class="mono">hawkaz.cloud</span>.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow">01</div>
+    <h2>Logo</h2>
+    <p>Two lockups. The horizontal is the default for headers, email signatures and dashboards. The square is for avatars, cards and anywhere the space is roughly 1:1. The mark alone is for icons and favicons.</p>
+    <div class="grid" style="grid-template-columns:1fr">
+      <figure class="card checker">
+        <img src="png/logo-horizontal-1760-transparent.png" alt="HawkAZ horizontal lockup" style="max-width:640px">
+        <figcaption>HORIZONTAL &mdash; default</figcaption>
+      </figure>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <figure class="card checker"><img src="png/logo-square-1024-transparent.png" alt="Square lockup, transparent"><figcaption>SQUARE / TRANSPARENT</figcaption></figure>
+      <figure class="card" style="background:var(--cream)"><img src="png/logo-square-1024-light.png" alt="Square lockup, cream"><figcaption>SQUARE / CREAM</figcaption></figure>
+      <figure class="card" style="background:var(--navy);border-color:var(--navy)"><img src="png/logo-square-1024-dark.png" alt="Square lockup, navy"><figcaption style="color:#A6B3C4">SQUARE / NAVY</figcaption></figure>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <figure class="card checker"><img src="png/icon-1024-transparent.png" alt="Icon, transparent"><figcaption>ICON / TRANSPARENT</figcaption></figure>
+      <figure class="card"><img src="png/icon-512-navy.png" alt="Icon, navy tile"><figcaption>ICON / NAVY TILE</figcaption></figure>
+      <figure class="card"><img src="png/icon-512-copper.png" alt="Icon, copper tile"><figcaption>ICON / COPPER TILE</figcaption></figure>
+      <figure class="card checker"><img src="png/hawk-mark-1024-transparent.png" alt="Hawk only"><figcaption>HAWK ONLY / 16&ndash;24PX</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02</div>
+    <h2>Construction and sizing</h2>
+    <div class="card">
+      <table>
+        <tr><th>Rule</th><th>Value</th></tr>
+        <tr><td>Wingspan</td><td>1.35&times; the width of the state silhouette; primaries break past both edges</td></tr>
+        <tr><td>Clear space</td><td>Half the state&rsquo;s width on all sides of the lockup. Nothing enters it.</td></tr>
+        <tr><td>Min size &mdash; horizontal</td><td>160px wide on screen, 40mm in print</td></tr>
+        <tr><td>Min size &mdash; square</td><td>64px</td></tr>
+        <tr><td>Min size &mdash; icon with state</td><td>32px. Below that use the hawk alone (<span class="mono">favicon-hawk-*.svg</span>).</td></tr>
+        <tr><td>Icon corner radius</td><td>12.5% of tile width (64px on a 512px tile)</td></tr>
+      </table>
+    </div>
+    <div class="rules">
+      <div class="rule yes"><h3>Do</h3>
+        <ul>
+          <li>Use copper state + navy hawk on light backgrounds.</li>
+          <li>Use copper state + cream hawk on navy or ink backgrounds.</li>
+          <li>Use the one-colour version for stamps, embroidery and laser work.</li>
+          <li>Keep the wordmark two-tone: &ldquo;Hawk&rdquo; in the dominant colour, &ldquo;AZ&rdquo; in the accent.</li>
+        </ul>
+      </div>
+      <div class="rule no"><h3>Don&rsquo;t</h3>
+        <ul>
+          <li>Don&rsquo;t rotate, skew, or add gradients, bevels or drop shadows.</li>
+          <li>Don&rsquo;t recolour the hawk and state the same value &mdash; the state stops reading.</li>
+          <li>Don&rsquo;t place the full lockup on a busy photo; use the icon tile instead.</li>
+          <li>Don&rsquo;t retype the wordmark in another font or letterspace it.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03</div>
+    <h2>Colour</h2>
+    <p>Arizona flag palette, warmed down. Copper and navy carry the identity; gold is the accent on dark; sunset red is for emphasis only, never for the mark.</p>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="swatch" style="background:#B0603A;color:#F7EFDF"><strong>Copper</strong>#B0603A</div>
+      <div class="swatch" style="background:#1F3A5F;color:#F7EFDF"><strong>Deep blue</strong>#1F3A5F</div>
+      <div class="swatch" style="background:#E0A03C;color:#2A2622"><strong>Sun gold</strong>#E0A03C</div>
+      <div class="swatch" style="background:#C0442E;color:#F7EFDF"><strong>Sunset red</strong>#C0442E</div>
+      <div class="swatch" style="background:#F7EFDF;color:#2A2622;border:1px solid var(--line)"><strong>Cream</strong>#F7EFDF</div>
+      <div class="swatch" style="background:#F4EDE1;color:#2A2622;border:1px solid var(--line)"><strong>Sand</strong>#F4EDE1</div>
+      <div class="swatch" style="background:#8A7A63;color:#F7EFDF"><strong>Stone</strong>#8A7A63</div>
+      <div class="swatch" style="background:#2A2622;color:#F7EFDF"><strong>Ink</strong>#2A2622</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04</div>
+    <h2>Type</h2>
+    <div class="card" style="display:flex;flex-direction:column;gap:18px">
+      <div>
+        <div style="font-size:44px;font-weight:800;line-height:1.1">Bitter 800 &mdash; wordmark &amp; headings</div>
+        <div class="mono" style="font-size:12px;color:var(--stone);margin-top:6px">Google Fonts &middot; slab serif &middot; 400 for body, 600 for subheads, 800 for display</div>
+      </div>
+      <div>
+        <div class="mono" style="font-size:20px;letter-spacing:.18em">IBM PLEX MONO &mdash; DOMAIN, LABELS</div>
+        <div class="mono" style="font-size:12px;color:var(--stone);margin-top:6px">Uppercase, 0.18&ndash;0.22em tracking, stone or muted colour. Never larger than the wordmark.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05</div>
+    <h2>Files</h2>
+    <div class="card">
+      <table>
+        <tr><th>Path</th><th>Use</th></tr>
+        <tr><td class="mono">svg/logo-horizontal-{transparent,light,dark}.svg</td><td>Primary lockup, any size</td></tr>
+        <tr><td class="mono">svg/logo-square-{transparent,light,dark}.svg</td><td>Square lockup</td></tr>
+        <tr><td class="mono">svg/icon-{transparent,navy,copper}.svg</td><td>App / dashboard icon, 32px+</td></tr>
+        <tr><td class="mono">svg/favicon-hawk-{navy,transparent}.svg</td><td>Hawk only, 16&ndash;24px</td></tr>
+        <tr><td class="mono">png/logo-horizontal-1760-*.png</td><td>Email signature, slides, docs</td></tr>
+        <tr><td class="mono">png/logo-square-1024-*.png</td><td>Avatars, social profiles</td></tr>
+        <tr><td class="mono">png/icon-512-navy.png &middot; icon-512-copper.png</td><td>Tiles, PWA icons</td></tr>
+        <tr><td class="mono">png/apple-touch-icon-180.png</td><td>iOS home screen</td></tr>
+        <tr><td class="mono">png/favicon-32.png &middot; favicon-16.png</td><td>Browser favicon</td></tr>
+        <tr><td class="mono">png/*-transparent.png</td><td>Alpha channel, for placing on any background</td></tr>
+      </table>
+      <p class="mono" style="font-size:12px;color:var(--stone);margin-top:14px">SVG wordmark text uses <span style="color:var(--ink)">font-family: Bitter</span>. If Bitter is not available where the SVG renders, use the PNG lockups &mdash; their type is already rasterised.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06</div>
+    <h2>Implementation</h2>
+    <pre>:root {
+  --copper:  #B0603A;   /* primary, state silhouette */
+  --navy:    #1F3A5F;   /* primary, hawk + wordmark on light */
+  --gold:    #E0A03C;   /* accent on dark */
+  --sunset:  #C0442E;   /* emphasis only */
+  --cream:   #F7EFDF;   /* surface, light */
+  --sand:    #F4EDE1;   /* page background */
+  --stone:   #8A7A63;   /* muted text */
+  --ink:     #2A2622;   /* text, dark surface */
+  --line:    #E2D6C1;   /* hairline */
+
+  --font-display: Bitter, Georgia, serif;
+  --font-mono: 'IBM Plex Mono', Menlo, monospace;
+}</pre>
+    <pre>&lt;link rel="icon" href="/favicon.svg" type="image/svg+xml"&gt;
+&lt;link rel="icon" href="/favicon-32.png" sizes="32x32"&gt;
+&lt;link rel="icon" href="/favicon-16.png" sizes="16x16"&gt;
+&lt;link rel="apple-touch-icon" href="/apple-touch-icon-180.png"&gt;
+&lt;link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"&gt;</pre>
+    <div class="card">
+      <h3>Notes for Claude Code</h3>
+      <ul style="margin:10px 0 0;padding-left:18px;font-size:14.5px;color:#4A4238">
+        <li>The state polygon and hawk path live inside the SVG files &mdash; inline them rather than re-drawing.</li>
+        <li>Dark surfaces: navy <span class="mono">#1F3A5F</span> or ink <span class="mono">#2A2622</span> only. Gold replaces copper as the wordmark accent on dark.</li>
+        <li>Body copy at 400 weight, headings 800. No third typeface.</li>
+        <li>Personal project, not a business &mdash; no trademark, no &copy; footer boilerplate needed.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
