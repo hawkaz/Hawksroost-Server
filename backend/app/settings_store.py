@@ -37,11 +37,11 @@ SECTIONS: dict[str, dict[str, Any]] = {
         "serial": "",              # optional: only accept this station's packets
         "api_token": "",           # optional: Tempest personal access token, for the forecast
         "station_id": "",
+        "elevation_ft": 0,         # station height, to show sea-level pressure; 0 = show station pressure
     },
     "starlink": {
         "enabled": True,
         "address": "192.168.100.1:9200",
-        "billing_day": 1,
     },
     "alerts": {
         "default_cooldown_s": 300,

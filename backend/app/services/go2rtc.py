@@ -1,7 +1,9 @@
 """Register camera streams with go2rtc through its API.
 
-Camera addresses and passwords live in the app's database, so go2rtc's own
-config file stays generic; the app pushes stream sources at runtime.
+Cameras are set up in the app (Admin → Cameras), which pushes each stream to
+go2rtc at runtime. Note: go2rtc saves streams added this way into its own
+config file (data/go2rtc/go2rtc.yaml), stream logins included. That file lives
+in the gitignored data folder on the laptop and is never served.
 """
 import logging
 

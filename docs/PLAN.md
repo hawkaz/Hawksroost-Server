@@ -4,19 +4,20 @@ Living document. Update it as work lands.
 Requirements and device research: [CABIN_PROJECT_BRIEF.md](CABIN_PROJECT_BRIEF.md).
 How to install and run: [DEPLOY.md](DEPLOY.md). Radio hardware: [RADIO.md](RADIO.md).
 
-## Status (2026-10-31)
+## Status (2026-11-01)
 
-**All phases are built and tested in a container.** Nothing has run on the real
-laptop or devices yet. Next needs Chris: deploy key + clone, then the laptop
-survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md)).
+**All phases are built and tested in a container; the laptop is prepared and the
+front door (Caddy + Let's Encrypt + DDNS) works.** The 2026-11-01 redesign
+(below) is built and tested here, not yet on the laptop. Next needs Chris:
+`scripts/update.sh`, first admin invite, then integrations in the app.
 
 | Phase | State | Verified on real hardware? |
 |---|---|---|
 | 0 Host prep | Scripts + guide written | No — needs Chris |
 | 1 Foundation (auth, roles, PWA, push, backups, health, sign-in photo) | Built, tested | No |
 | 2 Household (calendar, shopping, to-do) | Built, tested | n/a |
-| 3 Weather + Starlink | Built; tested with simulated Tempest packets | No — [VERIFY] |
-| 4 TrackMix (live, PTZ, recordings, clips, pictures, alerts) | Built on `reolink_aio`; clip cutting tested with a generated video | No — [VERIFY] streams, tele lens, PTZ, SD search/download, push events |
+| 3 Weather + Starlink (separate pages) | Built; tested with simulated data | No — [VERIFY] |
+| 4 Cameras (Reolink, ONVIF, stream URL; live, PTZ, presets, recordings, clips, pictures, alerts, siren, light) | Built on drivers; clip cutting tested with a generated video | No — [VERIFY] on the real camera: streams, zoom-lens stream, PTZ, SD search/download, push events, siren, light |
 | 5 Argus | Skipped (decision) | — |
 | 6 Radio | Built; researched Mormon Lake list (docs/RADIO.md) with repeater tones; generated config parses in RTLSDR-Airband | No — needs dongle |
 
@@ -37,6 +38,11 @@ survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md))
 | — | Backups | Nightly local SQLite copies only; no off-site | 2026-10-31 |
 | — | Git | Everything on `main`, no branches | 2026-10-31 |
 | — | Build order | Radio last | 2026-10-31 |
+| — | Devices | Phone, tablet and PC are all first-class: tabs on phones, icon rail on tablets, sidebar on computers | 2026-11-01 |
+| — | Cameras | Brand-neutral: Reolink, ONVIF or a plain video URL; each camera says what it can do and the UI shows only that. No model names in the app | 2026-11-01 |
+| — | Starlink | Own page. Only what the dish measures; usage counters and billing estimates removed | 2026-11-01 |
+| — | Sign-in | No names on the page; Remember me, Forgot password, Request access | 2026-11-01 |
+| — | Admin | Grouped by job: People, Site, Sign-in & email, Cameras, Weather, Starlink, Radio, System | 2026-11-01 |
 
 **Roles**
 
@@ -44,8 +50,8 @@ survey with `scripts/server-check.sh`, then server prep ([DEPLOY.md](DEPLOY.md))
 |---|---|---|---|
 | See everything, watch cameras, listen, download clips | ✓ | ✓ | ✓ |
 | Book the cabin, edit lists, keep radio clips | | ✓ | ✓ |
-| Pan/tilt the camera, go to presets | | ✓ | ✓ |
-| Auto-tracking, settings, integrations, people, invites, others' bookings | | | ✓ |
+| Pan/tilt the camera, go to presets, camera light and siren | | ✓ | ✓ |
+| Auto-tracking, settings, integrations, people, invites, access requests, others' bookings | | | ✓ |
 
 **Why D3 changed:** the brief assumed Starlink CGNAT. Chris has Local Priority
 with a public IP, so a direct front door removes the Cloudflare video-policy
@@ -69,7 +75,7 @@ except where noted.
 | Starter lists | To-do + Before we leave |
 | Times | Cabin time (MST, UTC−7, no DST) |
 | Retention | Defaults |
-| Sign-in photo | Pine for now. **Added:** admin uploads a photo in Admin → Integrations |
+| Sign-in photo | Pine for now. **Added:** admin uploads a photo in Admin → Site |
 | App icon | Pine tile |
 | Charts | One measurement per chart |
 | Live view pause | 5 minutes |
@@ -97,19 +103,41 @@ Chris's choices: remove nginx-proxy-manager, Portainer, OpenWebRX, old recorder,
 and (later the same day) Home Assistant + Watchtower — not in use yet; Wi-Fi off; printing/Bluetooth/ModemManager
 off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 
+## Claude's decisions for review (2026-11-01 redesign)
+
+- **Remember me** is on by default. Off = cookie ends when the browser closes
+  and the server ends the session after 24 hours without use.
+- **Forgot password without email set up** notifies admins (push + email if
+  available) so one can send a reset link from People. Same answer either way, so
+  the page never reveals who has an account.
+- **Request access** is rate-limited (5 an hour per address), ignores repeats and
+  existing accounts, and notifies admins. Inviting from a request defaults the
+  role to **viewer**; change it in the invite form if they should book or edit.
+- **Camera siren** needs a second tap within 4 seconds; it sounds twice and stops
+  (Reolink's default). Light and siren are member-level, like pan/tilt.
+- **ONVIF** cameras: main stream = the largest H.264 profile, sub = the smallest.
+  Motion/person/vehicle/animal come from the camera's event topics, which vary by
+  brand. [VERIFY] with a real ONVIF camera if one is ever added.
+- **Weather 30-day view** shows one point per cabin day (low–high band + average);
+  24 hours = 15-minute points; 7 days = 2-hour points.
+- **Sea-level pressure** needs the station elevation (Admin → Weather). At 0 the
+  app shows station pressure, labelled as such.
+- **Starlink availability** = share of seconds where not every ping failed,
+  counted only while the laptop was on.
+
 ## Still open
 
 | Question | Needed by |
 |---|---|
 | Power-loss test (skipped by Chris 2026-10-31; Wake on AC set in BIOS, untested) | Optional |
-| Camera probe output | Camera |
+| Camera probe output (now also siren/light support) | Camera |
 | Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
 | Delete old branches + set `main` default in GitHub | Any time (Chris) |
 
 ## Architecture
 
 ```
- Family phones / PCs ──HTTPS──► hawksroost.live (DNS-only, kept current by ddns)
+ Phones / tablets / PCs ──HTTPS──► hawksroost.live (DNS-only, kept current by ddns)
                                   │  Starlink public IP → own router → TCP 80/443
 ┌──────────────── Dell Latitude · Debian · Docker Compose ─────────────────────┐
 │  caddy (host network, Let's Encrypt) ──► web :8080 (nginx: app files;        │
@@ -148,3 +176,13 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   public IP.
 - 2026-10-31 — Retired Home Assistant and Watchtower (not in use yet); prep
   script removes them and the old ~/Docker stack.
+- 2026-11-01 — Redesign: works as well on tablets and PCs as phones; camera
+  drivers (Reolink / ONVIF / stream URL) with capability-driven UI, siren and
+  light; sign-in page with Remember me, Forgot password and Request access;
+  Starlink's own page (status, alerts, sky map, live 15 minutes, history,
+  reliability, latency under load, dish details, admin controls); Weather
+  rebuilt (wind dial, rose, day/week/month charts to scale, daily table,
+  derived dew point, feels-like, sea-level pressure); Admin split into eight
+  sections with an overview. Fixed: weather history crashed (`range` shadowed
+  Python's built-in), camera add/edit crashed reloading from a worker thread.
+  Migration 0003. 41 tests pass.

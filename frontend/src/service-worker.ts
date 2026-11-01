@@ -32,7 +32,7 @@ sw.addEventListener('fetch', (event) => {
 	if (/^\/(api|video|radio)\//.test(url.pathname)) return;
 
 	if (req.mode === 'navigate') {
-		// Fresh page when online; cached shell when the cabin or the phone is offline.
+		// Fresh page when online; cached shell when the cabin or this device is offline.
 		event.respondWith(fetch(req).catch(async () => (await caches.match('/200.html')) ?? Response.error()));
 		return;
 	}

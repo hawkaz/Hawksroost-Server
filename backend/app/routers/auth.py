@@ -8,22 +8,23 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import config, mailer, push, settings_store, users
 from ..db import get_db
 from ..deps import client_ip, current_user, optional_user
-from ..models import Invite, PasswordReset, User
+from ..models import AccessRequest, Invite, PasswordReset, User
 from ..security import (
     SESSION_COOKIE, create_session, end_session, hash_password, hash_token,
-    login_limiter, new_token, verify_password,
+    RateLimiter, login_limiter, new_token, verify_password,
 )
 from ..timeutil import utcnow
 from ..web import base_url, is_https, set_session_cookie, sign, unsign
 
 log = logging.getLogger("hawk.auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+access_limiter = RateLimiter(limit=5, window_s=3600)
 
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
@@ -45,6 +46,7 @@ def auth_config(db: Session = Depends(get_db)):
         "login_photo": f"/api/auth/login-photo?v={general['login_photo_v']}" if general["login_photo"] else None,
         "google": bool(g["enabled"] and g["client_id"] and g["client_secret"]),
         "email": mailer.is_configured(db),
+        "request_access": True,
     }
 
 
@@ -74,6 +76,7 @@ def check(user: User | None = Depends(optional_user)):
 class LoginIn(BaseModel):
     email: str
     password: str
+    remember: bool = True
 
 
 @router.post("/login")
@@ -84,7 +87,8 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     user = users.find_by_email(db, body.email)
     if user is None or not user.active or not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "That email and password don't match.")
-    set_session_cookie(response, request, create_session(db, user, request.headers.get("user-agent")))
+    token = create_session(db, user, request.headers.get("user-agent"), persistent=body.remember)
+    set_session_cookie(response, request, token, persistent=body.remember)
     return users.full(user)
 
 
@@ -143,7 +147,8 @@ def google_redirect_uri(request: Request | None, db: Session) -> str:
 
 
 @router.get("/google/start")
-def google_start(request: Request, invite: str | None = None, next: str | None = None, db: Session = Depends(get_db)):
+def google_start(request: Request, invite: str | None = None, next: str | None = None, remember: bool = True,
+                 db: Session = Depends(get_db)):
     g = _google_cfg(db)
     state = secrets.token_urlsafe(16)
     params = {
@@ -153,7 +158,7 @@ def google_start(request: Request, invite: str | None = None, next: str | None =
     }
     resp = RedirectResponse(f"{GOOGLE_AUTH}?{urlencode(params)}", status_code=302)
     resp.set_cookie(
-        OAUTH_COOKIE, sign({"state": state, "invite": invite, "next": _safe_next(next)}),
+        OAUTH_COOKIE, sign({"state": state, "invite": invite, "next": _safe_next(next), "remember": remember}),
         max_age=600, httponly=True, secure=is_https(request), samesite="lax", path="/api/auth",
     )
     return resp
@@ -204,7 +209,9 @@ async def google_callback(request: Request, code: str | None = None, state: str 
         db.commit()
 
     resp = RedirectResponse(_safe_next(saved.get("next")), status_code=302)
-    set_session_cookie(resp, request, create_session(db, user, request.headers.get("user-agent")))
+    remember = bool(saved.get("remember", True))
+    set_session_cookie(resp, request, create_session(db, user, request.headers.get("user-agent"), persistent=remember),
+                       persistent=remember)
     resp.delete_cookie(OAUTH_COOKIE, path="/api/auth")
     return resp
 
@@ -227,15 +234,63 @@ async def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)
     if not login_limiter.hit(f"forgot|{client_ip(request)}"):
         raise HTTPException(429, "Too many tries. Wait 15 minutes and try again.")
     user = users.find_by_email(db, body.email)
-    if user and user.active and mailer.is_configured(db):
+    if user is None or not user.active:
+        return {"ok": True}  # same answer either way: don't reveal who has an account
+    if mailer.is_configured(db):
         link = make_reset_link(db, request, user)
         site = settings_store.get(db, "general")["site_name"]
         try:
             await mailer.send(db, user.email, f"Reset your {site} password",
                               f"Hi {user.name},\n\nUse this link to set a new password (good for 2 days):\n{link}\n\n"
                               "If you didn't ask for this, ignore this email.")
+            return {"ok": True}
         except Exception:
             log.exception("reset email failed")
+    # No email set up (or it failed): ask the admins to send a reset link.
+    await notify_admins(db, request, f"{user.name} forgot their password",
+                        "Open People to send them a reset link.", "/admin/people")
+    return {"ok": True}
+
+
+# --- Request access ------------------------------------------------------------------
+
+async def notify_admins(db: Session, request: Request | None, title: str, body: str, path: str) -> None:
+    """Push to every admin; also email them when email is set up."""
+    admins = db.scalars(select(User).where(User.role == "admin", User.active)).all()
+    try:
+        await push.send_to_users(db, [a.id for a in admins], title, body, url=path, tag="admin")
+    except Exception:
+        log.exception("admin push failed")
+    if mailer.is_configured(db):
+        link = f"{base_url(request, db)}{path}"
+        for a in admins:
+            try:
+                await mailer.send(db, a.email, title, f"{body}\n\n{link}\n")
+            except Exception:
+                log.exception("admin email failed")
+
+
+class AccessIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    email: EmailStr
+    message: str | None = Field(None, max_length=1000)
+
+
+@router.post("/request-access", status_code=202)
+async def request_access(body: AccessIn, request: Request, db: Session = Depends(get_db)):
+    if not access_limiter.hit(client_ip(request)):
+        raise HTTPException(429, "Too many requests from here. Try again later.")
+    email = str(body.email).lower()
+    if users.find_by_email(db, email) is None:
+        pending = db.scalar(select(AccessRequest).where(
+            func.lower(AccessRequest.email) == email, AccessRequest.handled_at.is_(None)))
+        if pending is None:
+            db.add(AccessRequest(name=body.name.strip(), email=email, message=(body.message or "").strip() or None))
+            db.commit()
+            note = f"{body.name.strip()} ({email}) would like an account."
+            if body.message:
+                note += f' They wrote: "{body.message.strip()[:300]}"'
+            await notify_admins(db, request, "Someone asked for access", note, "/admin/people")
     return {"ok": True}
 
 

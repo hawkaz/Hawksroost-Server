@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import {
-		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Camera, Download, Play, Scissors, ZoomIn, ZoomOut
+		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Camera, Download, Lightbulb, LightbulbOff, Play, Scissors,
+		Siren, ZoomIn, ZoomOut
 	} from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
 	import LivePlayer from '#lib/components/LivePlayer.svelte';
@@ -70,7 +71,7 @@
 	function release() {
 		if (moving) ptz('Stop');
 	}
-	async function preset(pid: number) {
+	async function preset(pid: string) {
 		try {
 			await api.post(`/api/cameras/${id}/preset`, { id: pid });
 		} catch (e) {
@@ -86,14 +87,50 @@
 			toast.error(e);
 		}
 	}
+	// Siren: first tap arms it, second tap within a few seconds sounds it.
+	let sirenArmed = $state(false);
+	let sirenTimer: ReturnType<typeof setTimeout> | undefined;
+	async function siren() {
+		if (!sirenArmed) {
+			sirenArmed = true;
+			clearTimeout(sirenTimer);
+			sirenTimer = setTimeout(() => (sirenArmed = false), 4000);
+			return;
+		}
+		sirenArmed = false;
+		clearTimeout(sirenTimer);
+		try {
+			await api.post(`/api/cameras/${id}/siren`, { on: true });
+			toast.show('Siren sounded.');
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+	async function light(on: boolean) {
+		try {
+			await api.post(`/api/cameras/${id}/light`, { on });
+			toast.show(`Light ${on ? 'on' : 'off'}.`);
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+	$effect(() => () => clearTimeout(sirenTimer));
+
 	const streamName = $derived(cam?.streams[lens] ?? cam?.streams.sub ?? '');
+	const tabs = $derived([
+		{ id: 'live', label: 'Live' },
+		...(cam?.recordings ? [{ id: 'recordings', label: 'Recordings' }] : []),
+		...(cam?.events ? [{ id: 'events', label: 'Motion' }] : [])
+	] as { id: typeof tab; label: string }[]);
+	const canMove = $derived(!!cam?.online && !!cam.ptz && session.can('camera_control'));
+	const hasExtras = $derived(!!cam?.online && (cam.siren || cam.light) && session.can('camera_control'));
 	const PAD = [
 		{ cmd: 'Up', Icon: ArrowUp, cls: 'up' },
 		{ cmd: 'Left', Icon: ArrowLeft, cls: 'left' },
 		{ cmd: 'Right', Icon: ArrowRight, cls: 'right' },
 		{ cmd: 'Down', Icon: ArrowDown, cls: 'down' }
 	];
-	const LENS = { sub: 'Wide', main: 'Wide · full quality', tele: 'Zoom lens' } as const;
+	const LENS = { sub: 'Standard', main: 'Full quality', tele: 'Zoom lens' } as const;
 	// Recording times come from the camera's clock (cabin time) without a zone: read them as-is.
 	const hms = (s: string) => s.slice(11, 19);
 	const secs = (t: string) => {
@@ -151,74 +188,114 @@
 
 <div class="stack">
 	<div class="spread">
-		<div><a href="/cameras" class="small muted">← Cameras</a><h1>{cam?.name ?? 'Camera'}</h1></div>
-		<a href="/settings#alerts" class="btn secondary"><Bell size={18} strokeWidth={1.75} />Alerts</a>
+		<div>
+			<a href="/cameras" class="small muted">← Cameras</a>
+			<h1>{cam?.name ?? 'Camera'}</h1>
+		</div>
+		{#if cam?.events}
+			<a href="/settings#alerts" class="btn secondary"><Bell size={18} strokeWidth={1.75} />Alerts</a>
+		{/if}
 	</div>
 
-	<div class="pill-tabs">
-		<button class:on={tab === 'live'} onclick={() => (tab = 'live')}>Live</button>
-		<button class:on={tab === 'recordings'} onclick={() => (tab = 'recordings')}>Recordings</button>
-		<button class:on={tab === 'events'} onclick={() => (tab = 'events')}>Motion</button>
-	</div>
+	{#if tabs.length > 1}
+		<div class="pill-tabs">
+			{#each tabs as t (t.id)}
+				<button class:on={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
+			{/each}
+		</div>
+	{/if}
 
 	{#if cam && tab === 'live'}
 		{#if !cam.online}
 			<p class="notice warn">{cam.name} camera is offline{cam.last_ok_at ? ` since ${dayTime(cam.last_ok_at)}` : ''}.</p>
-		{:else if streamName}
-			{#key streamName}<LivePlayer stream={streamName} name={`${cam.name} · ${LENS[lens]}`} />{/key}
-			<div class="row wrap">
-				{#each Object.keys(cam.streams) as k (k)}
-					<button class="btn secondary" class:sel={lens === k} onclick={() => (lens = k as typeof lens)}>{LENS[k as keyof typeof LENS]}</button>
-				{/each}
-			</div>
-			<div class="row wrap">
-				<a class="btn secondary" href={`/api/cameras/${id}/snapshot?full=1&download=1`} download><Camera size={18} strokeWidth={1.75} />Save picture</a>
-			</div>
-			<p class="small muted">Full quality uses more of the cabin's internet. Use it only when you need detail.</p>
-		{/if}
-
-		{#if cam.online && cam.ptz && session.can('camera_control')}
-			<section class="card">
-				<div class="card-head"><span class="label">Move the camera</span></div>
-				<div class="ptz-wrap">
-					<div class="pad" role="group" aria-label="Pan and tilt">
-						{#each PAD as { cmd, Icon, cls } (cmd)}
-							<button
-								class={`btn secondary ${cls}`}
-								aria-label={`Move ${cmd}`}
-								onpointerdown={() => ptz(cmd)}
-								onpointerup={release}
-								onpointerleave={release}
-								onpointercancel={release}
-								oncontextmenu={(e) => e.preventDefault()}
-							><Icon size={22} strokeWidth={1.75} /></button>
-						{/each}
+		{:else}
+			<div class="live" class:solo={!canMove && !hasExtras && cam.auto_track === null}>
+				<div class="stack">
+					{#if streamName}
+						{#key streamName}<LivePlayer stream={streamName} name={`${cam.name} · ${LENS[lens]}`} />{/key}
+					{:else}
+						<p class="notice warn">{cam.name} camera is connected, but its live video isn't available. The laptop's video service may be down; an admin can check Admin → System.</p>
+					{/if}
+					<div class="row wrap">
+						{#if Object.keys(cam.streams).length > 1}
+							<div class="pill-tabs" role="group" aria-label="Picture">
+								{#each Object.keys(cam.streams) as k (k)}
+									<button class:on={lens === k} onclick={() => (lens = k as typeof lens)}>{LENS[k as keyof typeof LENS]}</button>
+								{/each}
+							</div>
+						{/if}
+						<a class="btn secondary" href={`/api/cameras/${id}/snapshot?full=1&download=1`} download><Camera size={18} strokeWidth={1.75} />Save picture</a>
 					</div>
-					{#if cam.zoom}
-						<div class="stack" style="gap:8px">
-							<button class="btn secondary" aria-label="Zoom in" onpointerdown={() => ptz('ZoomInc')} onpointerup={release} onpointerleave={release}><ZoomIn size={20} strokeWidth={1.75} /></button>
-							<button class="btn secondary" aria-label="Zoom out" onpointerdown={() => ptz('ZoomDec')} onpointerup={release} onpointerleave={release}><ZoomOut size={20} strokeWidth={1.75} /></button>
-						</div>
+					{#if cam.streams.main}
+						<p class="small muted">Full quality uses more of the cabin's internet. Use it only when you need detail.</p>
 					{/if}
 				</div>
-				{#if cam.presets.length}
-					<div class="label" style="margin-top:16px">Presets</div>
-					<div class="row wrap" style="margin-top:8px">
-						{#each cam.presets as p (p.id)}<button class="btn secondary" onclick={() => preset(p.id)}>{p.name}</button>{/each}
-					</div>
-				{/if}
-			</section>
-		{/if}
 
-		{#if cam.online && cam.auto_track !== null}
-			<section class="card spread">
-				<div><div>Auto-tracking</div><div class="small muted">The camera follows people, vehicles and animals on its own.</div></div>
-				{#if session.can('admin')}
-					<input type="checkbox" checked={cam.auto_track} onchange={(e) => setTrack((e.target as HTMLInputElement).checked)} aria-label="Auto-tracking" />
-				{:else}
-					<span class="chip">{cam.auto_track ? 'On' : 'Off'}</span>
-				{/if}
-			</section>
+				<div class="controls">
+					{#if canMove}
+						<section class="card">
+							<h2 class="h3">Move the camera</h2>
+							<div class="ptz-wrap">
+								<div class="pad" role="group" aria-label="Pan and tilt">
+									{#each PAD as { cmd, Icon, cls } (cmd)}
+										<button
+											class={`btn secondary ${cls}`}
+											aria-label={`Move ${cmd.toLowerCase()}`}
+											onpointerdown={() => ptz(cmd)}
+											onpointerup={release}
+											onpointerleave={release}
+											onpointercancel={release}
+											oncontextmenu={(e) => e.preventDefault()}
+										><Icon size={22} strokeWidth={1.75} /></button>
+									{/each}
+								</div>
+								{#if cam.zoom}
+									<div class="zoom">
+										<button class="btn secondary" aria-label="Zoom in" onpointerdown={() => ptz('ZoomInc')} onpointerup={release} onpointerleave={release}><ZoomIn size={20} strokeWidth={1.75} /></button>
+										<button class="btn secondary" aria-label="Zoom out" onpointerdown={() => ptz('ZoomDec')} onpointerup={release} onpointerleave={release}><ZoomOut size={20} strokeWidth={1.75} /></button>
+									</div>
+								{/if}
+							</div>
+							<p class="small muted hint">Press and hold to move.</p>
+							{#if cam.presets.length}
+								<h3 class="sub">Go to</h3>
+								<div class="row wrap">
+									{#each cam.presets as p (p.id)}<button class="btn secondary" onclick={() => preset(p.id)}>{p.name}</button>{/each}
+								</div>
+							{/if}
+						</section>
+					{/if}
+
+					{#if cam.auto_track !== null}
+						<section class="card spread">
+							<div><h2 class="h3">Auto-tracking</h2><div class="small muted">The camera follows people, vehicles and animals on its own.</div></div>
+							{#if session.can('admin')}
+								<input type="checkbox" checked={cam.auto_track} onchange={(e) => setTrack((e.target as HTMLInputElement).checked)} aria-label="Auto-tracking" />
+							{:else}
+								<span class="chip">{cam.auto_track ? 'On' : 'Off'}</span>
+							{/if}
+						</section>
+					{/if}
+
+					{#if hasExtras}
+						<section class="card">
+							<h2 class="h3">Light and siren</h2>
+							<div class="row wrap extras">
+								{#if cam.light}
+									<button class="btn secondary" onclick={() => light(true)}><Lightbulb size={18} strokeWidth={1.75} />Light on</button>
+									<button class="btn secondary" onclick={() => light(false)}><LightbulbOff size={18} strokeWidth={1.75} />Light off</button>
+								{/if}
+								{#if cam.siren}
+									<button class="btn" class:danger={sirenArmed} class:secondary={!sirenArmed} onclick={siren} aria-live="polite">
+										<Siren size={18} strokeWidth={1.75} />{sirenArmed ? 'Tap again to sound' : 'Siren'}
+									</button>
+								{/if}
+							</div>
+							{#if cam.siren}<p class="small muted hint">The siren is loud. Anyone near the camera will hear it.</p>{/if}
+						</section>
+					{/if}
+				</div>
+			</div>
 		{/if}
 	{/if}
 
@@ -258,7 +335,7 @@
 					</ul>
 				</section>
 			{:else}
-				<div class="card empty"><p>No recordings that day.</p><p>The memory card keeps as much as fits, then records over the oldest.</p></div>
+				<div class="card empty"><p>No recordings that day.</p><p>The camera keeps as much as fits, then records over the oldest.</p></div>
 			{/if}
 			<p class="small muted">Recordings are long files. Use <strong>Clip</strong> to watch or save just the minutes you want; it's much faster over the cabin's internet than downloading a whole file.</p>
 		{/if}
@@ -333,15 +410,53 @@
 		background: var(--accent);
 		transition: width 0.4s;
 	}
-	.btn.sel {
-		border-color: var(--accent);
-		color: var(--accent);
+	/* Video beside its controls on tablets and computers; stacked on phones. */
+	.live {
+		display: grid;
+		gap: var(--space-4);
+	}
+	.live > * {
+		min-width: 0;
+	}
+	.controls {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+	.controls:empty {
+		display: none;
+	}
+	@media (min-width: 1000px) {
+		.live:not(.solo) {
+			grid-template-columns: minmax(0, 1fr) 300px;
+			align-items: start;
+		}
+	}
+	.h3 {
+		font: 600 17px/24px var(--font-display);
+		margin: 0 0 var(--space-3);
+	}
+	.sub {
+		font: 600 15px/20px var(--font-ui);
+		margin: var(--space-4) 0 var(--space-2);
+	}
+	.hint {
+		margin-top: var(--space-3);
+		text-align: center;
+	}
+	.extras .btn {
+		flex: 1 1 auto;
 	}
 	.ptz-wrap {
 		display: flex;
 		gap: var(--space-5);
 		align-items: center;
 		justify-content: center;
+	}
+	.zoom {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 	.pad {
 		display: grid;
@@ -367,16 +482,6 @@
 	}
 	.down {
 		grid-area: 3 / 2;
-	}
-	.plain {
-		background: none;
-		border: 0;
-		padding: 0;
-		text-align: left;
-		color: inherit;
-		font: inherit;
-		cursor: pointer;
-		min-height: var(--tap);
 	}
 	.snap {
 		width: 100%;

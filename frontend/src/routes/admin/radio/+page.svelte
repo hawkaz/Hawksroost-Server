@@ -117,7 +117,7 @@
 </script>
 
 <div class="stack">
-	<AdminNav />
+	<AdminNav title="Radio" />
 	{#if settings}
 		<SettingsForm section="radio" title="Radio scanner" fields={F} bind:values={settings}>
 			{#snippet intro()}<p class="small muted">The recorder also has to be started on the server (see the deploy guide, “Radio”). After changing dongles or channels, press <strong>Apply</strong> below.</p>{/snippet}

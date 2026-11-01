@@ -13,7 +13,8 @@ from .models import AuthSession, User
 from .timeutil import utcnow
 
 SESSION_COOKIE = "hr_session"
-SESSION_DAYS = 120  # family app on phones: stay signed in, slide on use
+SESSION_DAYS = 120       # "Remember me": stay signed in, sliding on use
+SHORT_SESSION_HOURS = 24  # without "Remember me": ends a day after last use (cookie ends with the browser)
 
 _hasher = PasswordHasher()
 
@@ -54,12 +55,16 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_session(db: Session, user: User, user_agent: str | None) -> str:
+def _lifetime(persistent: bool) -> timedelta:
+    return timedelta(days=SESSION_DAYS) if persistent else timedelta(hours=SHORT_SESSION_HOURS)
+
+
+def create_session(db: Session, user: User, user_agent: str | None, persistent: bool = True) -> str:
     token = new_token()
     now = utcnow()
     db.add(AuthSession(
-        id=hash_token(token), user_id=user.id, created_at=now, last_seen_at=now,
-        expires_at=now + timedelta(days=SESSION_DAYS), user_agent=(user_agent or "")[:255],
+        id=hash_token(token), user_id=user.id, created_at=now, last_seen_at=now, persistent=persistent,
+        expires_at=now + _lifetime(persistent), user_agent=(user_agent or "")[:255],
     ))
     user.last_seen_at = now
     db.commit()
@@ -73,10 +78,10 @@ def session_user(db: Session, token: str | None) -> User | None:
     now = utcnow()
     if sess is None or sess.expires_at < now or not sess.user.active:
         return None
-    # Slide the expiry at most once an hour to avoid a write per request.
-    if (now - sess.last_seen_at) > timedelta(hours=1):
+    # Slide the expiry at most every few minutes to avoid a write per request.
+    if (now - sess.last_seen_at) > timedelta(minutes=10):
         sess.last_seen_at = now
-        sess.expires_at = now + timedelta(days=SESSION_DAYS)
+        sess.expires_at = now + _lifetime(sess.persistent)
         sess.user.last_seen_at = now
         db.commit()
     return sess.user

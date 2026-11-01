@@ -1,4 +1,4 @@
-"""Probe a camera saved in Settings → Cameras and print what it supports.
+"""Probe the Reolink cameras saved in Admin → Cameras and print what they support.
 
     docker compose exec api python -m probes.reolink
 """
@@ -22,7 +22,8 @@ async def probe(cam: Camera) -> dict:
         await h.get_host_data()
         await h.get_states()
         out.update(model=h.model, firmware=h.sw_version, nvr=h.is_nvr, channels=list(h.channels))
-        caps = ["ptz", "pan_tilt", "zoom", "ptz_presets", "ptz_speed", "auto_track", "autotrack_stream", "ai_people"]
+        caps = ["ptz", "pan_tilt", "zoom", "ptz_presets", "ptz_speed", "auto_track", "autotrack_stream", "ai_people",
+                "siren", "siren_play", "floodLight", "replay"]
         out["supports"] = {c: h.supported(ch, c) for c in caps}
         out["ai_types"] = h.ai_supported_types(ch)
         out["presets"] = h.ptz_presets(ch)
@@ -63,7 +64,7 @@ async def probe(cam: Camera) -> dict:
 
 async def main() -> None:
     with SessionLocal() as db:
-        cams = db.scalars(select(Camera).order_by(Camera.id)).all()
+        cams = db.scalars(select(Camera).where(Camera.kind == "reolink").order_by(Camera.id)).all()
     if not cams:
         print("No cameras saved yet. Add one in the app: Settings → Cameras.")
         sys.exit(1)

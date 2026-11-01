@@ -37,7 +37,20 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     user_agent: Mapped[str | None] = mapped_column(String(255))
+    persistent: Mapped[bool] = mapped_column(Boolean, default=True)  # "Remember me"
     user: Mapped[User] = relationship()
+
+
+class AccessRequest(Base):
+    """Someone asked for an account from the sign-in page."""
+    __tablename__ = "access_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    email: Mapped[str] = mapped_column(String(254))
+    message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    outcome: Mapped[str | None] = mapped_column(String(16))  # invited | dismissed
 
 
 class Invite(Base):
@@ -99,10 +112,12 @@ class Camera(Base):
     __tablename__ = "cameras"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(16), default="reolink")  # reolink | onvif | stream
     host: Mapped[str] = mapped_column(String(255))
     port: Mapped[int | None] = mapped_column(Integer)
-    username: Mapped[str] = mapped_column(String(80))
-    password: Mapped[str] = mapped_column(String(255))
+    username: Mapped[str] = mapped_column(String(80), default="")
+    password: Mapped[str] = mapped_column(String(255), default="")
+    options: Mapped[dict] = mapped_column(JSON, default=dict)  # per-kind extras (stream URLs, ...)
     channel: Mapped[int] = mapped_column(Integer, default=0)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sort: Mapped[int] = mapped_column(Integer, default=0)
@@ -229,9 +244,13 @@ class StarlinkSample(Base):
     drop_rate: Mapped[float | None] = mapped_column(Float)
     down_bps: Mapped[float | None] = mapped_column(Float)
     up_bps: Mapped[float | None] = mapped_column(Float)
-    down_bytes: Mapped[float] = mapped_column(Float, default=0)
-    up_bytes: Mapped[float] = mapped_column(Float, default=0)
+    down_bytes: Mapped[float] = mapped_column(Float, default=0)   # unused (usage counters dropped)
+    up_bytes: Mapped[float] = mapped_column(Float, default=0)     # unused
+    down_peak_bps: Mapped[float | None] = mapped_column(Float)
+    up_peak_bps: Mapped[float | None] = mapped_column(Float)
+    power_w: Mapped[float | None] = mapped_column(Float)
     obstructed_s: Mapped[int] = mapped_column(Integer, default=0)
+    outage_s: Mapped[int] = mapped_column(Integer, default=0)     # seconds with every ping dropped
     seconds: Mapped[int] = mapped_column(Integer, default=0)
 
 

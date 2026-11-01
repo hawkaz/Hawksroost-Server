@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .. import config, mailer, settings_store, state, users
 from ..db import get_db
 from ..deps import admin
-from ..models import FAMILY_COLORS, ROLES, AuthSession, Camera, Invite, RadioRecording, User
+from ..models import FAMILY_COLORS, ROLES, AccessRequest, AuthSession, Camera, Invite, RadioRecording, User
 from ..security import hash_token, new_token
 from ..timeutil import iso, utcnow
 from ..web import base_url
@@ -86,6 +86,7 @@ class InviteIn(BaseModel):
     role: str = "member"
     days: int = Field(7, ge=1, le=60)
     send_email: bool = False
+    request_id: int | None = None  # answering an access request
 
 
 def _invite_out(inv: Invite, url: str | None = None) -> dict:
@@ -111,6 +112,10 @@ async def create_invite(body: InviteIn, request: Request, db: Session = Depends(
     inv = Invite(token_hash=hash_token(token), name=body.name, email=body.email, role=body.role,
                  created_by=me.id, expires_at=utcnow() + timedelta(days=body.days))
     db.add(inv)
+    if body.request_id:
+        req = db.get(AccessRequest, body.request_id)
+        if req and req.handled_at is None:
+            req.handled_at, req.outcome = utcnow(), "invited"
     db.commit()
     url = f"{base_url(request, db)}/invite/{token}"
     emailed = False
@@ -130,6 +135,23 @@ async def create_invite(body: InviteIn, request: Request, db: Session = Depends(
 def revoke_invite(invite_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invite, invite_id) or _404()
     db.delete(inv)
+    db.commit()
+
+
+# --- Access requests (from the sign-in page) -----------------------------------------
+
+@router.get("/access-requests")
+def access_requests(db: Session = Depends(get_db)):
+    rows = db.scalars(select(AccessRequest).where(AccessRequest.handled_at.is_(None))
+                      .order_by(AccessRequest.created_at.desc())).all()
+    return [{"id": r.id, "name": r.name, "email": r.email, "message": r.message, "created_at": iso(r.created_at)}
+            for r in rows]
+
+
+@router.post("/access-requests/{req_id}/dismiss", status_code=204)
+def dismiss_request(req_id: int, db: Session = Depends(get_db)):
+    req = db.get(AccessRequest, req_id) or _404()
+    req.handled_at, req.outcome = utcnow(), "dismissed"
     db.commit()
 
 
@@ -248,7 +270,9 @@ async def health(db: Session = Depends(get_db)):
     if settings_store.get(db, "starlink")["enabled"]:
         s = state.get_row(db, "starlink_status")
         fresh = bool(s and _age_s(s.updated_at) < 300 and not s.value.get("error"))
-        add("Starlink", fresh, "Dish reachable" if fresh else (s.value.get("error") if s else "No data yet"),
+        detail = "Dish reachable" if fresh else (
+            (s.value.get("error") or "No word from the dish in 5 minutes") if s else "No data yet")
+        add("Starlink", fresh, detail,
             s.updated_at if s else None)
 
     for cam in db.scalars(select(Camera).where(Camera.enabled)):

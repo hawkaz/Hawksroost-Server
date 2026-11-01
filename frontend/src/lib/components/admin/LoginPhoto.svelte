@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Admin: pick the sign-in screen photo. Shrinks big phone photos before upload.
+	// Admin: pick the sign-in screen photo. Shrinks big photos before upload.
 	import { api } from '#lib/api.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 

@@ -1,4 +1,4 @@
-// Light / dark / follow the phone. Cameras and Radio are always dark (brand guide).
+// Light / dark / follow the device. Cameras and Radio are always dark (brand guide).
 export type ThemePref = 'system' | 'light' | 'dark';
 
 function read(): ThemePref {

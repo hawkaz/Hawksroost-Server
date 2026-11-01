@@ -44,7 +44,10 @@
 	const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 	const w = $derived(data?.weather);
 	const u = $derived(data?.units ?? 'imperial');
-	const starlinkOk = $derived(!!data?.starlink && !data.starlink.error && (Date.now() - new Date(data.starlink.updated_at).getTime()) < 300000);
+	const sl = $derived(data?.starlink ?? null);
+	const starlinkFresh = $derived(!!sl && !sl.error && Date.now() - new Date(sl.updated_at).getTime() < 300000);
+	const starlinkOk = $derived(starlinkFresh && sl?.state === 'CONNECTED');
+	const shownCams = $derived(data?.cameras.slice(0, 4) ?? []);
 </script>
 
 <div class="stack">
@@ -54,7 +57,7 @@
 	{#if data}
 		<div class="grid grid-2">
 			<section class="card">
-				<div class="card-head"><span class="label">At the cabin</span><a class="btn text" href="/calendar">Calendar</a></div>
+				<div class="card-head"><h2>At the cabin</h2><a class="btn text" href="/calendar">Calendar</a></div>
 				{#if data.at_cabin.length}
 					<ul class="list">
 						{#each data.at_cabin as b (b.id)}
@@ -65,7 +68,7 @@
 					<p class="muted">Nobody's booked in tonight.</p>
 				{/if}
 				{#if data.next.length}
-					<div class="label" style="margin-top:16px">Coming up</div>
+					<h3 class="sub">Coming up</h3>
 					<ul class="list">
 						{#each data.next as b (b.id)}
 							<li>
@@ -81,7 +84,7 @@
 			</section>
 
 			<a class="card weather" href="/weather">
-				<div class="card-head"><span class="label">Weather at the lake</span><ChevronRight size={20} strokeWidth={1.75} /></div>
+				<div class="card-head"><h2>Weather</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
 				{#if w}
 					<div class="row">
 						<span class="big">{temp(w.temp_c as number, u)}</span>
@@ -92,23 +95,21 @@
 						</div>
 					</div>
 				{:else}
-					<p class="muted">No weather yet. An admin can check Settings → Tempest.</p>
+					<p class="muted">No weather yet. An admin can check Admin → Weather.</p>
 				{/if}
-				<div class="row small starlink">
-					<span class="dot" style="background:{starlinkOk ? 'var(--ok)' : 'var(--warn)'}"></span>
-					{#if starlinkOk}Starlink online · <span class="data">{Math.round(data.starlink?.latency_ms ?? 0)} ms</span>{:else}Starlink {data.starlink?.error ? 'unreachable' : 'no data'}{/if}
-				</div>
 			</a>
 
-			{#if data.cameras.length}
-				<a class="card cam" href={`/cameras/${data.cameras[0].id}`}>
-					<div class="card-head"><span class="label">Cameras</span><ChevronRight size={20} strokeWidth={1.75} /></div>
-					<CameraThumb id={data.cameras[0].id} name={data.cameras[0].name} />
+			{#if shownCams.length}
+				<a class="card cam" href={shownCams.length === 1 ? `/cameras/${shownCams[0].id}` : '/cameras'}>
+					<div class="card-head"><h2>Cameras</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
+					<div class="cams" class:multi={shownCams.length > 1}>
+						{#each shownCams as c (c.id)}<CameraThumb id={c.id} name={c.name} every={shownCams.length > 1 ? 60 : 30} />{/each}
+					</div>
 				</a>
 			{/if}
 
 			<section class="card">
-				<div class="card-head"><span class="label">To-do · {data.task_count} open</span><a class="btn text" href="/lists?tab=todo">All lists</a></div>
+				<div class="card-head"><h2>To-do <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists?tab=todo">All lists</a></div>
 				{#if data.tasks.length}
 					<ul class="list">
 						{#each data.tasks as t (t.id)}
@@ -128,9 +129,25 @@
 				</a>
 			</section>
 
+			{#if sl}
+				<a class="card" href="/starlink">
+					<div class="card-head"><h2>Starlink</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
+					<div class="row link-state">
+						<span class="dot" class:ok={starlinkOk} class:warn={starlinkFresh && !starlinkOk} class:bad={!starlinkFresh}></span>
+						{#if starlinkOk}
+							<span>Online · <span class="data">{Math.round(sl.latency_ms ?? 0)} ms</span> latency</span>
+						{:else if starlinkFresh}
+							<span>Not connected right now</span>
+						{:else}
+							<span>Can’t reach the dish · last heard {ago(sl.updated_at)}</span>
+						{/if}
+					</div>
+				</a>
+			{/if}
+
 			{#if radio?.enabled}
 				<a class="card" href="/radio">
-					<div class="card-head"><span class="label">Radio</span><ChevronRight size={20} strokeWidth={1.75} /></div>
+					<div class="card-head"><h2>Radio</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
 					{#if radio.incidents.length}
 						<p><span class="chip live pulse">Busy</span> {radio.incidents.map((i) => i.label).join(', ')}</p>
 					{:else if radio.active.length}
@@ -158,15 +175,46 @@
 		align-items: center;
 		gap: var(--space-4);
 	}
-	.starlink {
-		margin-top: var(--space-4);
+	.card-head h2 {
+		font-size: 19px;
+		line-height: 26px;
+	}
+	.count {
+		font-weight: 400;
+		font-size: 13px;
+		color: var(--text-muted);
+		margin-left: var(--space-1);
+	}
+	.sub {
+		font: 600 15px/20px var(--font-ui);
+		margin: var(--space-4) 0 var(--space-1);
+	}
+	.cams {
+		display: grid;
+		gap: var(--space-2);
+	}
+	.cams.multi {
+		grid-template-columns: 1fr 1fr;
+	}
+	.link-state {
 		gap: var(--space-2);
 	}
 	.dot {
+		flex: none;
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
 		display: inline-block;
+		background: var(--text-muted);
+	}
+	.dot.ok {
+		background: var(--ok);
+	}
+	.dot.warn {
+		background: var(--warn);
+	}
+	.dot.bad {
+		background: var(--warn);
 	}
 	.shop {
 		margin-top: var(--space-3);

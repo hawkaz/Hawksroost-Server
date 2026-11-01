@@ -1,12 +1,18 @@
-"""Cameras: list, snapshots, PTZ, recordings, events. Admin: add/edit cameras."""
+"""Cameras: list, snapshots, controls, recordings, events. Admin: add/edit cameras.
+
+What a camera offers (pan/tilt, presets, recordings, siren, ...) comes from its
+driver's capabilities, so the UI never assumes a brand. CameraOffline (503) and
+NotSupported (400) are turned into responses in main.py.
+"""
 import time
 from datetime import date, datetime, timedelta
 from typing import Literal
 
+from urllib.parse import unquote, urlsplit, urlunsplit
+
 from fastapi import APIRouter, Depends, HTTPException
-from reolink_aio.typings import VOD_trigger
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +22,7 @@ from ..deps import admin, camera_control, optional_user, viewer
 from ..models import Camera, CameraEvent, User
 from ..security import can
 from ..services import clips
-from ..services.cameras import CameraOffline, manager, stream_names, test_connection
+from ..services.cameras import KINDS, PTZ_COMMANDS, manager, stream_names, test_connection
 from ..timeutil import LOCAL_TZ, iso
 from ..web import sign, unsign
 
@@ -24,17 +30,18 @@ router = APIRouter(tags=["cameras"])
 
 
 def _cam_out(cam: Camera, db: Session) -> dict:
-    conn = manager.conns.get(cam.id)
     last = db.scalar(select(CameraEvent).where(CameraEvent.camera_id == cam.id)
                      .order_by(CameraEvent.started_at.desc()).limit(1))
     caps = cam.capabilities or {}
     names = stream_names(cam.id)
     return {
         "id": cam.id, "name": cam.name, "model": cam.model,
-        "online": bool(conn and conn.online), "last_ok_at": iso(cam.last_ok_at), "error": cam.last_error,
+        "online": manager.online(cam.id), "last_ok_at": iso(cam.last_ok_at), "error": cam.last_error,
         "streams": {k: names[k] for k in caps.get("streams", [])},
         "ptz": bool(caps.get("ptz")), "zoom": bool(caps.get("zoom")),
         "presets": manager.presets(cam.id), "auto_track": manager.auto_track(cam.id),
+        "recordings": bool(caps.get("recordings")), "events": bool(caps.get("events")),
+        "siren": bool(caps.get("siren")), "light": bool(caps.get("light")),
         "ai_types": caps.get("ai_types", []),
         "last_event": {"type": last.type, "at": iso(last.started_at)} if last else None,
     }
@@ -57,10 +64,7 @@ async def snapshot(cam_id: int, full: bool = False, download: bool = False,
     if not full and cached and time.monotonic() - cached[0] < 5:
         jpg = cached[1]
     else:
-        try:
-            jpg = await manager.snapshot(cam_id, "main" if full else "sub")
-        except CameraOffline:
-            raise HTTPException(503, "Camera is offline")
+        jpg = await manager.snapshot(cam_id, full)
         if not jpg:
             raise HTTPException(503, "No picture from the camera")
         if not full:
@@ -74,29 +78,36 @@ async def snapshot(cam_id: int, full: bool = False, download: bool = False,
 
 
 class PtzIn(BaseModel):
-    command: Literal["Left", "Right", "Up", "Down", "LeftUp", "LeftDown", "RightUp", "RightDown",
-                     "ZoomInc", "ZoomDec", "Stop"]
+    command: str = Field(pattern="^(" + "|".join(PTZ_COMMANDS) + ")$")
     speed: int | None = Field(None, ge=1, le=64)
 
 
 @router.post("/api/cameras/{cam_id}/ptz", status_code=204)
 async def ptz(cam_id: int, body: PtzIn, _: User = Depends(camera_control)):
-    try:
-        await manager.ptz(cam_id, body.command, body.speed)
-    except CameraOffline:
-        raise HTTPException(503, "Camera is offline")
+    await manager.ptz(cam_id, body.command, body.speed)
 
 
 class PresetIn(BaseModel):
-    id: int
+    id: str = Field(min_length=1, max_length=64)
 
 
 @router.post("/api/cameras/{cam_id}/preset", status_code=204)
 async def preset(cam_id: int, body: PresetIn, _: User = Depends(camera_control)):
-    try:
-        await manager.goto_preset(cam_id, body.id)
-    except CameraOffline:
-        raise HTTPException(503, "Camera is offline")
+    await manager.goto_preset(cam_id, body.id)
+
+
+class OnOffIn(BaseModel):
+    on: bool
+
+
+@router.post("/api/cameras/{cam_id}/siren", status_code=204)
+async def siren(cam_id: int, body: OnOffIn, _: User = Depends(camera_control)):
+    await manager.siren(cam_id, body.on)
+
+
+@router.post("/api/cameras/{cam_id}/light", status_code=204)
+async def light(cam_id: int, body: OnOffIn, _: User = Depends(camera_control)):
+    await manager.light(cam_id, body.on)
 
 
 class AutoTrackIn(BaseModel):
@@ -105,10 +116,7 @@ class AutoTrackIn(BaseModel):
 
 @router.put("/api/cameras/{cam_id}/autotrack")
 async def autotrack(cam_id: int, body: AutoTrackIn, _: User = Depends(admin)):
-    try:
-        await manager.set_auto_track(cam_id, body.enabled)
-    except CameraOffline:
-        raise HTTPException(503, "Camera is offline")
+    await manager.set_auto_track(cam_id, body.enabled)
     return {"auto_track": manager.auto_track(cam_id)}
 
 
@@ -118,32 +126,15 @@ async def autotrack(cam_id: int, body: AutoTrackIn, _: User = Depends(admin)):
 async def recordings(cam_id: int, day: date, _: User = Depends(viewer)):
     start = datetime(day.year, day.month, day.day)
     end = start + timedelta(days=1) - timedelta(seconds=1)
-    try:
-        statuses, files = await manager.recordings(cam_id, start, end, stream="sub")
-    except CameraOffline:
-        raise HTTPException(503, "Camera is offline")
-    days = sorted({d.isoformat() for s in statuses for d in (date(s.year, s.month, x) for x in s.days)})
-    out = []
-    for f in files:
-        out.append({
-            "name": f.file_name, "start": f.start_time.isoformat(), "end": f.end_time.isoformat(),
-            "start_id": f.start_time_id, "end_id": f.end_time_id,
-            "duration_s": int(f.duration.total_seconds()),
-            "triggers": [t.name.lower() for t in VOD_trigger if t in f.triggers and t is not VOD_trigger.TIMER],
-        })
-    out.sort(key=lambda x: x["start"], reverse=True)
-    return {"days_with_recordings": days, "files": out}
+    return await manager.recordings(cam_id, start, end)
 
 
 @router.get("/api/cameras/{cam_id}/recordings/file")
 async def recording_file(cam_id: int, name: str, start_id: str, end_id: str,
                          stream: Literal["main", "sub"] = "sub", download: bool = False,
                          _: User = Depends(viewer)):
-    """Stream a clip from the camera's SD card through the app (the camera isn't on the internet)."""
-    try:
-        vod = await manager.download(cam_id, name, start_id, end_id, stream)
-    except CameraOffline:
-        raise HTTPException(503, "Camera is offline")
+    """Stream a recording from the camera through the app (the camera isn't on the internet)."""
+    vod = await manager.download(cam_id, name, start_id, end_id, stream)
 
     async def body():
         try:
@@ -248,23 +239,72 @@ def event_snapshot(event_id: int, sig: str | None = None, download: bool = False
 
 # --- Admin: manage cameras ---------------------------------------------------------------------
 
+def split_credentials(url: str) -> tuple[str, str, str]:
+    """rtsp://user:pass@host/x → (rtsp://host/x, user, pass). The login is kept in its own fields."""
+    parts = urlsplit(url.strip())
+    if not parts.username:
+        return url.strip(), "", ""
+    netloc = parts.hostname or ""
+    if parts.port:
+        netloc += f":{parts.port}"
+    clean = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    return clean, unquote(parts.username), unquote(parts.password or "")
+
+
+class CameraOptions(BaseModel):
+    main_url: str = Field("", max_length=500)
+    sub_url: str = Field("", max_length=500)
+    snapshot_url: str = Field("", max_length=500)
+
+
 class CameraIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    host: str = Field(min_length=1, max_length=255)
+    kind: Literal["reolink", "onvif", "stream"] = "reolink"
+    host: str = Field("", max_length=255)
     port: int | None = Field(None, ge=1, le=65535)
-    username: str = Field(min_length=1, max_length=80)
-    password: str | None = Field(None, max_length=255)  # None = keep current
+    username: str = Field("", max_length=80)
+    password: str | None = Field(None, max_length=255)  # None/empty = keep current
     channel: int = Field(0, ge=0, le=63)
+    options: CameraOptions = CameraOptions()
     enabled: bool = True
     sort: int = 0
     cooldown_s: int = Field(300, ge=30, le=86400)
 
+    @model_validator(mode="after")
+    def check(self):
+        self.host = self.host.strip()
+        if self.kind == "stream":
+            o = self.options
+            for key in ("main_url", "sub_url", "snapshot_url"):
+                url, user, pw = split_credentials(getattr(o, key))
+                setattr(o, key, url)
+                if user and not self.username:
+                    self.username, self.password = user, pw
+            if not o.main_url:
+                raise ValueError("Enter the camera's video address.")
+            if urlsplit(o.main_url).scheme not in ("rtsp", "rtsps", "http", "https", "rtmp"):
+                raise ValueError("The video address should start with rtsp:// or http://")
+            self.host = urlsplit(o.main_url).hostname or ""
+        else:
+            if not self.host:
+                raise ValueError("Enter the camera's address.")
+            if not self.username:
+                raise ValueError("Enter the camera's username.")
+            self.options = CameraOptions()
+        return self
+
 
 def _admin_out(c: Camera) -> dict:
-    return {"id": c.id, "name": c.name, "host": c.host, "port": c.port, "username": c.username,
-            "password_set": bool(c.password), "channel": c.channel, "enabled": c.enabled,
-            "sort": c.sort, "cooldown_s": c.cooldown_s, "model": c.model, "firmware": c.firmware,
-            "capabilities": c.capabilities, "last_ok_at": iso(c.last_ok_at), "last_error": c.last_error}
+    return {"id": c.id, "name": c.name, "kind": c.kind, "host": c.host, "port": c.port, "username": c.username,
+            "password_set": bool(c.password), "channel": c.channel, "options": c.options or {},
+            "enabled": c.enabled, "sort": c.sort, "cooldown_s": c.cooldown_s, "model": c.model,
+            "firmware": c.firmware, "capabilities": c.capabilities, "last_ok_at": iso(c.last_ok_at),
+            "last_error": c.last_error}
+
+
+@router.get("/api/admin/cameras/kinds", dependencies=[Depends(admin)])
+def camera_kinds():
+    return [{"id": k, "label": v} for k, v in KINDS.items()]
 
 
 @router.get("/api/admin/cameras", dependencies=[Depends(admin)])
@@ -274,9 +314,11 @@ def admin_cameras(db: Session = Depends(get_db)):
 
 @router.post("/api/admin/cameras", status_code=201, dependencies=[Depends(admin)])
 def add_camera(body: CameraIn, db: Session = Depends(get_db)):
-    if not body.password:
+    if body.kind != "stream" and not body.password:
         raise HTTPException(400, "Enter the camera's password.")
-    cam = Camera(**body.model_dump())
+    data = body.model_dump()
+    data["password"] = data["password"] or ""
+    cam = Camera(**data)
     db.add(cam)
     db.commit()
     manager.reload(cam.id)
@@ -292,6 +334,8 @@ def edit_camera(cam_id: int, body: CameraIn, db: Session = Depends(get_db)):
         if k == "password" and not v:
             continue
         setattr(cam, k, v)
+    if body.kind == "stream" and not body.username:
+        cam.password = ""   # no login, so don't keep an old password around
     db.commit()
     manager.reload(cam.id)
     return _admin_out(cam)
@@ -306,11 +350,8 @@ def delete_camera(cam_id: int, db: Session = Depends(get_db)):
     manager.reload(cam_id)
 
 
-class CameraTestIn(BaseModel):
-    host: str
-    port: int | None = None
-    username: str
-    password: str | None = None
+class CameraTestIn(CameraIn):
+    name: str = "test"
     camera_id: int | None = None  # test with the saved password
 
 
@@ -320,6 +361,7 @@ async def test_camera(body: CameraTestIn, db: Session = Depends(get_db)):
     if not password and body.camera_id:
         cam = db.get(Camera, body.camera_id)
         password = cam.password if cam else None
-    if not password:
+    if not password and body.kind != "stream":
         raise HTTPException(400, "Enter the camera's password.")
-    return await test_connection(body.host, body.username, password, body.port)
+    return await test_connection(body.kind, body.host, body.port, body.username, password or "",
+                                 body.channel, body.options.model_dump())

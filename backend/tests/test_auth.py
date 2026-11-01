@@ -75,3 +75,33 @@ def test_reset_link(client):
     assert client.post(f"/api/auth/reset/{token}", json={"password": "brand new pw"}).status_code == 200
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"email": "kid@example.com", "password": "brand new pw"}).status_code == 200
+
+
+def test_remember_me_off_gives_browser_session(client):
+    make_user("member", "sam@example.com")
+    r = client.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct horse", "remember": False})
+    assert r.status_code == 200
+    cookie = r.headers["set-cookie"]
+    assert "hr_session=" in cookie and "Max-Age" not in cookie
+    r2 = client.post("/api/auth/logout")
+    r = client.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct horse"})
+    assert "Max-Age" in r.headers["set-cookie"]
+
+
+def test_request_access_reaches_admins(client):
+    r = client.post("/api/auth/request-access", json={"name": "Pat", "email": "pat@example.com", "message": "Hi!"})
+    assert r.status_code == 202
+    # Asking twice doesn't make a second request.
+    client.post("/api/auth/request-access", json={"name": "Pat", "email": "PAT@example.com"})
+    login(client, "admin")
+    reqs = client.get("/api/admin/access-requests").json()
+    assert len(reqs) == 1 and reqs[0]["email"] == "pat@example.com"
+    inv = client.post("/api/admin/invites", json={"name": "Pat", "email": "pat@example.com", "request_id": reqs[0]["id"]})
+    assert inv.status_code == 201
+    assert client.get("/api/admin/access-requests").json() == []
+
+
+def test_forgot_without_email_still_ok(client):
+    make_user("member", "sam@example.com")
+    assert client.post("/api/auth/forgot", json={"email": "sam@example.com"}).status_code == 202
+    assert client.post("/api/auth/forgot", json={"email": "nobody@example.com"}).status_code == 202

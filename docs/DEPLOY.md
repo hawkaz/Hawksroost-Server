@@ -2,8 +2,8 @@
 
 Everything runs from `/opt/hawksroost` on the Dell Latitude (Debian, Docker),
 over SSH. Integrations (cameras, Tempest, Starlink, email, Google sign-in, radio
-channels, sign-in photo) are set up in the app afterwards, under
-**Admin → Integrations** and **Admin → Radio** — not on the server.
+channels, sign-in photo) are set up in the app afterwards, under **Admin** —
+not on the server.
 
 ## Overview
 
@@ -130,32 +130,32 @@ Open it, create your account. Everyone else: **Admin → People → Invite**.
 
 ## 6. Integrations (in the app)
 
-All under **Admin → Integrations**:
+Each has its own page under **Admin**:
 
-- **General:** public address `https://hawksroost.live`. **Sign-in photo:** upload one whenever you like.
-- **Cameras → Add:** the TrackMix's LAN address and a camera user for the app (make one in the Reolink app) → **Test** → **Save**. Then check what the camera supports:
+- **Site:** web address `https://hawksroost.live`. Sign-in photo: upload one whenever you like.
+- **Cameras → Add camera:** pick the type (Reolink for the cabin camera), its address on the cabin network and a camera login made for the app in the camera's own app → **Test** → **Save**. The test lists what the camera can do (pan/tilt, presets, recordings, siren, light…). Then check it in more detail:
 
   ```bash
   cd /opt/hawksroost && docker compose exec api python -m probes.reolink
   ```
 
   Paste the output back to Claude. If live video won't play, set the camera's encoding to H.264 in the Reolink app.
-- **Tempest:** nothing to enter for live data. Optional token + station ID for the forecast.
-- **Starlink:** the default `192.168.100.1:9200` normally works. Check:
+- **Weather:** nothing to enter for live data. Enter the station's elevation in feet (about 7,100 at Mormon Lake [VERIFY the station's own]) to show sea-level pressure. Optional token + station ID for the forecast.
+- **Starlink:** the default `192.168.100.1:9200` normally works. Dish restart, stow and the night sleep schedule are on the same page. Check:
 
   ```bash
   cd /opt/hawksroost && docker compose exec collector python -m probes.starlink
   ```
 
-- **Email (Brevo)** — sending from `cabin@hawksroost.live`:
+- **Sign-in & email → Email (Brevo)** — sending from `cabin@hawksroost.live`:
   1. Brevo → **Senders, Domains & Dedicated IPs → Domains → Add a domain** → `hawksroost.live`.
   2. Brevo lists DNS records (a Brevo code TXT, DKIM, DMARC). Add each in Cloudflare → hawksroost.live → **DNS** (DNS only, not proxied) → back in Brevo, **Verify**. Brevo may offer to do this automatically for Cloudflare.
   3. In the app's Email card: SMTP login and SMTP key from Brevo → **SMTP & API → SMTP**; from address `cabin@hawksroost.live` → **Send test**.
 
   Replies to that address go nowhere unless you forward it (Cloudflare → Email → Email Routing, free) [VERIFY current menu].
-- **Google sign-in:** follow the steps on that card; it shows the redirect URI to paste into Google Cloud.
+- **Sign-in & email → Google sign-in:** follow the steps on that card; it shows the redirect URI to paste into Google Cloud.
 
-**Admin → Health** shows what's working.
+**Admin → System** shows what's working. Requests to join from the sign-in page show up in **Admin → People**.
 
 ## Updating
 
@@ -179,7 +179,7 @@ Database changes only go forward, so check with Claude before rolling back acros
 ## Backups
 
 The app copies its database to `/opt/hawksroost/data/backups` every night
-(Admin → Integrations → Backups; 14 days kept). There's no off-site copy: if
+(Admin → System → Backups; 14 days kept). There's no off-site copy: if
 the laptop dies, the app is rebuilt from GitHub and the bookings and lists start
 fresh unless a backup file was copied off first.
 

@@ -25,7 +25,7 @@
 		background: var(--danger);
 		color: #fff;
 	}
-	@media (min-width: 900px) {
+	@media (min-width: 700px) {
 		.toast {
 			bottom: var(--space-5);
 		}

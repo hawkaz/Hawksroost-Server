@@ -12,8 +12,9 @@ from sqlalchemy import select
 from . import config, push
 from .db import SessionLocal
 from .models import TaskList
-from .routers import admin, auth, calendar, cameras, lists, me, radio, today, weather
+from .routers import admin, auth, calendar, cameras, lists, me, radio, starlink, today, weather
 from .services import jobs, radio_files
+from .services.cameras import CameraOffline, NotSupported
 from .services.cameras import manager as camera_manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -65,10 +66,20 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": msg, "field": field}, status_code=422)
 
 
+@app.exception_handler(CameraOffline)
+async def camera_offline(_: Request, __: CameraOffline):
+    return JSONResponse({"detail": "That camera is offline right now."}, status_code=503)
+
+
+@app.exception_handler(NotSupported)
+async def not_supported(_: Request, __: NotSupported):
+    return JSONResponse({"detail": "This camera can't do that."}, status_code=400)
+
+
 @app.get("/api/ping")
 def ping():
     return {"ok": True, "version": config.APP_VERSION}
 
 
-for r in (auth, me, admin, calendar, lists, weather, cameras, today, radio):
+for r in (auth, me, admin, calendar, lists, weather, starlink, cameras, today, radio):
     app.include_router(r.router)

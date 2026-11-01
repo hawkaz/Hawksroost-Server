@@ -12,6 +12,7 @@ cryptography==50.0.2
 icalendar==7.3.0
 mutagen==1.48.1
 reolink_aio==0.22.0
+onvif-zeep-async==4.3.0
 starlink-grpc-core==1.2.5
 grpcio==1.85.1
 grpcio-reflection==1.85.1

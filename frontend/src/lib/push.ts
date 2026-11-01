@@ -13,6 +13,17 @@ export function isIOS(): boolean {
 	return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+export type Platform = 'ios' | 'android' | 'mac-safari' | 'desktop';
+
+/** Rough guess at the kind of device, for install instructions. */
+export function platform(): Platform {
+	const ua = navigator.userAgent;
+	if (isIOS()) return 'ios';
+	if (/android/i.test(ua)) return 'android';
+	if (/macintosh/i.test(ua) && /safari/i.test(ua) && !/chrome|chromium|edg\//i.test(ua)) return 'mac-safari';
+	return 'desktop';
+}
+
 function keyToBytes(base64: string): Uint8Array<ArrayBuffer> {
 	const pad = '='.repeat((4 - (base64.length % 4)) % 4);
 	const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));

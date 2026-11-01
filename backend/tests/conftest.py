@@ -19,7 +19,15 @@ def fresh_db():
     config.ensure_dirs()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    for limiter in _limiters():
+        limiter.hits.clear()
     yield
+
+
+def _limiters():
+    from app.routers import auth
+    from app.security import RateLimiter
+    return [v for mod in (auth,) for v in vars(mod).values() if isinstance(v, RateLimiter)]
 
 
 @pytest.fixture

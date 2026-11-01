@@ -14,11 +14,11 @@
 </script>
 
 <div class="stack">
-	<div class="spread"><h1>Cameras</h1>{#if cams?.length}<span class="label">{online} online</span>{/if}</div>
+	<div class="spread"><h1>Cameras</h1>{#if cams?.length}<span class="small muted">{online === cams.length ? (cams.length === 1 ? 'Online' : `All ${cams.length} online`) : `${online} of ${cams.length} online`}</span>{/if}</div>
 	{#if cams && !cams.length}
 		<div class="card empty">
 			<p>No cameras yet.</p>
-			<p>{session.can('admin') ? 'Add one in Admin → Integrations → Cameras.' : 'An admin can add them.'}</p>
+			<p>{session.can('admin') ? 'Add one in Admin → Cameras.' : 'An admin can add them.'}</p>
 		</div>
 	{:else if cams}
 		<div class="grid grid-2">

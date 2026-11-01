@@ -27,9 +27,10 @@ def base_url(request: Request | None, db: Session) -> str:
     return f'{"https" if is_https(request) else "http"}://{host}'
 
 
-def set_session_cookie(response: Response, request: Request, token: str) -> None:
+def set_session_cookie(response: Response, request: Request, token: str, persistent: bool = True) -> None:
+    """Persistent ("Remember me") cookies last 120 days; others end when the browser closes."""
     response.set_cookie(
-        SESSION_COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True,
+        SESSION_COOKIE, token, max_age=SESSION_DAYS * 86400 if persistent else None, httponly=True,
         secure=is_https(request), samesite="lax", path="/",
     )
 

@@ -74,8 +74,12 @@ export interface CameraInfo {
 	streams: Partial<Record<'sub' | 'main' | 'tele', string>>;
 	ptz: boolean;
 	zoom: boolean;
-	presets: { id: number; name: string }[];
+	presets: { id: string; name: string }[];
 	auto_track: boolean | null;
+	recordings: boolean;
+	events: boolean;
+	siren: boolean;
+	light: boolean;
 	ai_types: string[];
 	last_event: { type: string; at: string } | null;
 }

@@ -1,8 +1,10 @@
-"""Reolink cameras via reolink_aio: connection, streams, PTZ, recordings, motion events.
+"""Cameras: keeps each enabled camera connected through its driver.
 
-Cameras are added in Settings → Cameras. On connect we read the camera's
-capabilities, hand its RTSP sources to go2rtc, and subscribe to its TCP push
-events (no webhook or inbound port needed). If push events fail we poll.
+Cameras are added in Admin → Cameras. On connect the driver reports what the
+camera can do and its video sources; the sources go to go2rtc, the
+capabilities are saved on the camera row (the UI only shows what a camera can
+do), and the driver then watches for detections. Started detections become
+events with a snapshot and, for people who asked, a notification.
 """
 import asyncio
 import logging
@@ -10,44 +12,44 @@ from dataclasses import dataclass, field
 from datetime import UTC, timedelta
 from pathlib import Path
 
-from reolink_aio.api import Host
 from sqlalchemy import select
 
-from .. import config, push, settings_store
-from ..db import SessionLocal
-from ..models import AlertPref, Camera, CameraEvent, User
-from ..timeutil import LOCAL_TZ, utcnow
-from . import go2rtc
+from ... import config, push, settings_store
+from ...db import SessionLocal
+from ...models import AlertPref, Camera, CameraEvent, User
+from ...timeutil import LOCAL_TZ, utcnow
+from .. import go2rtc
+from .drivers import KINDS, PTZ_COMMANDS, Driver, NotSupported, go2rtc_frame, make_driver
+
+__all__ = ["KINDS", "PTZ_COMMANDS", "CameraOffline", "NotSupported", "cleanup_old_events", "manager",
+           "stream_names", "test_connection"]
 
 log = logging.getLogger("hawk.cameras")
-
-# Our detection names → reolink_aio AI type names.
-AI_TYPES = {"person": "people", "vehicle": "vehicle", "animal": "dog_cat"}
-REFRESH_S = 120
-POLL_S = 3
+HEARTBEAT_S = 120
 
 
 def stream_names(cam_id: int) -> dict[str, str]:
     return {"sub": f"cam{cam_id}_sub", "main": f"cam{cam_id}_main", "tele": f"cam{cam_id}_tele"}
 
 
+class CameraOffline(Exception):
+    pass
+
+
 @dataclass
 class Conn:
     cam_id: int
-    host: Host
-    channel: int
+    driver: Driver
     online: bool = False
-    push_ok: bool = False
-    active: set[str] = field(default_factory=set)       # detection types currently on
+    active: set[str] = field(default_factory=set)        # detections currently on
     last_event: dict[str, float] = field(default_factory=dict)
     task: asyncio.Task | None = None
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class CameraManager:
     def __init__(self) -> None:
         self.conns: dict[int, Conn] = {}
-        self.last_push: dict[tuple[int, int], float] = {}   # (user, camera) → monotonic time
+        self.last_push: dict[tuple[int, int], float] = {}   # (user, camera) → loop time
         self._loop: asyncio.AbstractEventLoop | None = None
 
     # --- lifecycle ---------------------------------------------------------------
@@ -64,8 +66,16 @@ class CameraManager:
             await self._disconnect(cam_id)
 
     def reload(self, cam_id: int) -> None:
-        """(Re)connect a camera after it's added or edited. Safe to call any time."""
-        asyncio.get_running_loop().create_task(self._reload(cam_id))
+        """(Re)connect a camera after it's added, edited or removed. Safe to call any time,
+        including from plain (threaded) route handlers."""
+        coro = self._reload(cam_id)
+        try:
+            asyncio.get_running_loop().create_task(coro)
+        except RuntimeError:  # not on the event loop thread
+            if self._loop is None:
+                coro.close()
+                return
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     async def _reload(self, cam_id: int) -> None:
         await self._disconnect(cam_id)
@@ -75,8 +85,7 @@ class CameraManager:
                 for name in stream_names(cam_id).values():
                     await go2rtc.remove_stream(name)
                 return
-            host = Host(cam.host, cam.username, cam.password, port=cam.port, protocol="rtsp", stream="sub", timeout=20)
-            conn = Conn(cam_id=cam.id, host=host, channel=cam.channel)
+            conn = Conn(cam_id=cam.id, driver=make_driver(cam))
         self.conns[cam_id] = conn
         conn.task = asyncio.get_running_loop().create_task(self._run(conn))
 
@@ -86,12 +95,7 @@ class CameraManager:
             return
         if conn.task:
             conn.task.cancel()
-        try:
-            if conn.push_ok:
-                await conn.host.baichuan.unsubscribe_events()
-            await conn.host.logout()
-        except Exception:
-            pass
+        await conn.driver.close()
 
     # --- connection loop -------------------------------------------------------------
 
@@ -101,64 +105,45 @@ class CameraManager:
             try:
                 await self._connect(conn)
                 backoff = 10
-                while True:
-                    await asyncio.sleep(POLL_S if not conn.push_ok else REFRESH_S)
-                    if conn.push_ok:
-                        await conn.host.baichuan.check_subscribe_events()
-                        await conn.host.get_states()
-                    else:
-                        await conn.host.get_ai_state_all_ch()
-                        await conn.host.get_motion_state_all_ch()
-                        self._evaluate(conn)
-                    self._mark(conn.cam_id, ok=True)
+                watcher = asyncio.get_running_loop().create_task(
+                    conn.driver.watch(lambda active: self._on_change(conn, active)))
+                try:
+                    while not watcher.done():
+                        self._mark(conn.cam_id, ok=True)
+                        await asyncio.wait({watcher}, timeout=HEARTBEAT_S)
+                    watcher.result()   # re-raises whatever ended it
+                    raise RuntimeError("Lost the connection")
+                finally:
+                    watcher.cancel()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 conn.online = False
                 log.warning("camera %s: %s", conn.cam_id, e)
                 self._mark(conn.cam_id, ok=False, error=_friendly(e))
+                await conn.driver.close()
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 300)
 
     async def _connect(self, conn: Conn) -> None:
-        h, ch = conn.host, conn.channel
-        await h.get_host_data()
-        await h.get_states()
-        caps = {
-            "model": h.camera_model(ch) if h.is_nvr else h.model,
-            "ptz": h.supported(ch, "pan_tilt") or h.supported(ch, "ptz"),
-            "zoom": h.supported(ch, "zoom"),
-            "presets": h.supported(ch, "ptz_presets"),
-            "auto_track": h.supported(ch, "auto_track"),
-            "ai_types": [k for k, v in AI_TYPES.items() if v in (h.ai_supported_types(ch) or [])],
-            "streams": [],
-        }
+        info = await conn.driver.connect()
         names = stream_names(conn.cam_id)
-        sources = {
-            "sub": await h.get_rtsp_stream_source(ch, "sub"),
-            "main": await h.get_rtsp_stream_source(ch, "main"),
-        }
-        if caps["auto_track"]:
-            # TrackMix telephoto lens. [VERIFY] with backend/probes/reolink_probe.py
-            sources["tele"] = await h.get_rtsp_stream_source(ch, "autotrack_main", check=True)
-        for key, src in sources.items():
-            if src and await go2rtc.set_stream(names[key], src):
-                caps["streams"].append(key)
-        try:
-            await h.baichuan.subscribe_events()
-            h.baichuan.register_callback(f"hawk-{conn.cam_id}", lambda: self._on_push(conn))
-            conn.push_ok = True
-        except Exception as e:
-            log.info("camera %s: push events unavailable (%s); polling instead", conn.cam_id, e)
-            conn.push_ok = False
+        registered = []
+        for key, name in names.items():
+            src = info["streams"].get(key)
+            if src and await go2rtc.set_stream(name, src):
+                registered.append(key)
+            elif not src:
+                await go2rtc.remove_stream(name)
+        caps = {**info["caps"], "streams": registered}
         conn.online = True
         with SessionLocal() as db:
             cam = db.get(Camera, conn.cam_id)
             if cam:
-                cam.model, cam.firmware, cam.capabilities = caps["model"], h.sw_version, caps
+                cam.model, cam.firmware, cam.capabilities = info.get("model"), info.get("firmware"), caps
                 cam.last_ok_at, cam.last_error = utcnow(), None
                 db.commit()
-        log.info("camera %s connected: %s", conn.cam_id, caps)
+        log.info("camera %s connected (%s): %s", conn.cam_id, conn.driver.kind, caps)
 
     def _mark(self, cam_id: int, ok: bool, error: str | None = None) -> None:
         with SessionLocal() as db:
@@ -172,23 +157,10 @@ class CameraManager:
 
     # --- events ----------------------------------------------------------------------
 
-    def _on_push(self, conn: Conn) -> None:
-        # Called synchronously by reolink_aio from its socket reader.
-        self._evaluate(conn)
-
-    def _evaluate(self, conn: Conn) -> None:
-        h, ch = conn.host, conn.channel
-        now_on = set()
-        for ours, theirs in AI_TYPES.items():
-            try:
-                if h.ai_detected(ch, theirs):
-                    now_on.add(ours)
-            except Exception:
-                pass
-        if h.motion_detected(ch):
-            now_on.add("motion")
-        started = now_on - conn.active
-        conn.active = now_on
+    def _on_change(self, conn: Conn, active: set[str]) -> None:
+        """Drivers call this (sometimes from a socket callback) with what's detected right now."""
+        started = active - conn.active
+        conn.active = set(active)
         for kind in started:
             assert self._loop is not None
             self._loop.create_task(self._event(conn, kind))
@@ -211,7 +183,7 @@ class CameraManager:
 
     async def _save_snapshot(self, conn: Conn, kind: str) -> str | None:
         try:
-            jpg = await conn.host.get_snapshot(conn.channel, "sub")
+            jpg = await conn.driver.snapshot()
         except Exception:
             return None
         if not jpg:
@@ -242,7 +214,7 @@ class CameraManager:
             return
         words = {"person": "Someone", "vehicle": "A vehicle", "animal": "An animal", "motion": "Motion"}
         title = f"{words.get(ev.type, 'Motion')} at the {cam.name} camera"
-        from ..routers.cameras import signed_snapshot_url  # avoid import cycle
+        from ...routers.cameras import signed_snapshot_url  # avoid import cycle
         image = signed_snapshot_url(ev.id) if ev.snapshot else None
         local = now.replace(tzinfo=UTC).astimezone(LOCAL_TZ)
         ev.notified = await push.send_to_users(db, targets, title, f"{local:%-I:%M %p} · tap to look",
@@ -250,82 +222,91 @@ class CameraManager:
         db.commit()
 
     # --- actions used by the API -------------------------------------------------------
+    # Each raises CameraOffline when the camera isn't connected and NotSupported
+    # when this kind of camera can't do it.
 
-    def get(self, cam_id: int) -> Conn:
+    def online(self, cam_id: int) -> bool:
+        conn = self.conns.get(cam_id)
+        return bool(conn and conn.online)
+
+    def _driver(self, cam_id: int) -> Driver:
         conn = self.conns.get(cam_id)
         if conn is None or not conn.online:
             raise CameraOffline()
-        return conn
+        return conn.driver
 
-    async def snapshot(self, cam_id: int, stream: str = "sub") -> bytes | None:
-        conn = self.get(cam_id)
-        return await conn.host.get_snapshot(conn.channel, stream)
+    async def snapshot(self, cam_id: int, full: bool = False) -> bytes | None:
+        conn = self.conns.get(cam_id)
+        if conn is None:
+            raise CameraOffline()
+        if not conn.online:
+            # go2rtc may still reach the stream even when the control connection is down.
+            return await go2rtc_frame(stream_names(cam_id)["main" if full else "sub"])
+        return await conn.driver.snapshot(full)
 
     async def ptz(self, cam_id: int, command: str, speed: int | None = None) -> None:
-        conn = self.get(cam_id)
-        if not conn.host.supported(conn.channel, "ptz_speed"):
-            speed = None
-        await conn.host.set_ptz_command(conn.channel, command=command, speed=speed)
+        await self._driver(cam_id).ptz(command, speed)
 
-    async def goto_preset(self, cam_id: int, preset_id: int) -> None:
-        conn = self.get(cam_id)
-        await conn.host.set_ptz_command(conn.channel, preset=preset_id)
+    async def goto_preset(self, cam_id: int, preset_id: str) -> None:
+        await self._driver(cam_id).goto_preset(preset_id)
 
     def presets(self, cam_id: int) -> list[dict]:
-        conn = self.conns.get(cam_id)
-        if conn is None or not conn.online:
-            return []
-        return [{"id": i, "name": n} for n, i in conn.host.ptz_presets(conn.channel).items()]
+        return self.conns[cam_id].driver.presets() if self.online(cam_id) else []
 
     def auto_track(self, cam_id: int) -> bool | None:
-        conn = self.conns.get(cam_id)
-        if conn is None or not conn.online or not conn.host.supported(conn.channel, "auto_track"):
-            return None
-        return conn.host.auto_track_enabled(conn.channel)
+        return self.conns[cam_id].driver.auto_track() if self.online(cam_id) else None
 
     async def set_auto_track(self, cam_id: int, enable: bool) -> None:
-        conn = self.get(cam_id)
-        await conn.host.set_auto_tracking(conn.channel, enable)
+        await self._driver(cam_id).set_auto_track(enable)
 
-    async def recordings(self, cam_id: int, start, end, stream: str = "sub"):
-        conn = self.get(cam_id)
-        async with conn.lock:
-            return await conn.host.request_vod_files(conn.channel, start, end, stream=stream)
+    async def recordings(self, cam_id: int, start, end) -> dict:
+        return await self._driver(cam_id).recordings(start, end)
 
     async def download(self, cam_id: int, file_name: str, start_id: str, end_id: str, stream: str):
-        conn = self.get(cam_id)
-        return await conn.host.download_vod(
-            file_name, start_time=start_id, end_time=end_id, channel=conn.channel, stream=stream)
+        return await self._driver(cam_id).download(file_name, start_id, end_id, stream)
+
+    async def siren(self, cam_id: int, on: bool) -> None:
+        await self._driver(cam_id).siren(on)
+
+    async def light(self, cam_id: int, on: bool) -> None:
+        await self._driver(cam_id).light(on)
 
 
-class CameraOffline(Exception):
-    pass
-
-
-async def test_connection(host: str, username: str, password: str, port: int | None) -> dict:
-    """Used by Settings → Cameras → Test before saving."""
-    h = Host(host, username, password, port=port, timeout=15)
+async def test_connection(kind: str, host: str, port: int | None, username: str, password: str,
+                          channel: int, options: dict) -> dict:
+    """Used by Admin → Cameras → Test before saving. Connects, reports, disconnects."""
+    probe = Camera(id=0, kind=kind, host=host, port=port, username=username, password=password,
+                   channel=channel, options=options)
+    driver = make_driver(probe)
     try:
-        await h.get_host_data()
-        return {"ok": True, "model": h.model, "firmware": h.sw_version, "name": h.camera_name(0),
-                "channels": list(h.channels), "nvr": h.is_nvr}
+        info = await asyncio.wait_for(driver.connect(), timeout=30)
+        if kind == "stream":
+            # Nothing to log in to, so prove the video address works by grabbing a frame.
+            name = "hawk_test"
+            if not await go2rtc.set_stream(name, info["streams"]["main"]):
+                return {"ok": False, "error": "The video service isn't running."}
+            try:
+                if not await go2rtc_frame(name):
+                    return {"ok": False, "error": "No picture from that address. Check it and the login."}
+            finally:
+                await go2rtc.remove_stream(name)
+        return {"ok": True, "model": info.get("model"), "firmware": info.get("firmware"),
+                "caps": info["caps"], "streams": sorted(k for k, v in info["streams"].items() if v),
+                **info.get("extra", {})}
     except Exception as e:
         return {"ok": False, "error": _friendly(e)}
     finally:
-        try:
-            await h.logout()
-        except Exception:
-            pass
+        await driver.close()
 
 
 def _friendly(e: Exception) -> str:
     text = str(e) or type(e).__name__
     low = text.lower()
-    if "login" in low or "credential" in low or "password" in low:
+    if "login" in low or "credential" in low or "password" in low or "not authorized" in low or "401" in low:
         return "Wrong username or password."
-    if "timeout" in low or "timed out" in low:
+    if "timeout" in low or "timed out" in low or isinstance(e, TimeoutError):
         return "No answer from the camera. Check the address and that it's powered."
-    if "connect" in low or "unreachable" in low or "refused" in low:
+    if "connect" in low or "unreachable" in low or "refused" in low or "name or service" in low:
         return "Can't reach the camera at that address."
     return text[:200]
 

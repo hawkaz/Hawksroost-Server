@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Bottom sheet on phones, centred dialog on desktop.
+	// Bottom sheet on phones, centred dialog on tablets and computers.
 	import { X } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 
@@ -52,7 +52,7 @@
 	.head {
 		margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 0;
 	}
-	@media (min-width: 900px) {
+	@media (min-width: 700px) {
 		dialog {
 			width: 520px;
 			margin: auto;

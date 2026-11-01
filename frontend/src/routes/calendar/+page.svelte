@@ -169,7 +169,7 @@
 
 	<section class="card">
 		<div class="card-head">
-			<span class="label">{selected ? parseDate(selected).toDateString() : 'This month'}</span>
+			<h2 class="h3">{selected ? parseDate(selected).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'This month'}</h2>
 			{#if selected && session.can('edit')}<button class="btn text" onclick={() => newBooking(selected!)}>Book from this day</button>{/if}
 		</div>
 		{#if listed.length}
@@ -198,12 +198,18 @@
 
 	<section class="card">
 		<div class="spread">
-			<div><div class="label">Phone calendar</div><p class="small muted">Add the cabin bookings to your phone's calendar app.</p></div>
+			<div><h2 class="h3">Calendar apps</h2><p class="small muted">See the cabin bookings in the calendar you already use, on any device.</p></div>
 			<button class="btn secondary" onclick={showFeed}>Get link</button>
 		</div>
 		{#if feedUrl}
 			<input readonly value={feedUrl} onfocus={(e) => (e.target as HTMLInputElement).select()} style="margin-top:12px" />
-			<p class="small muted" style="margin-top:8px">iPhone: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar. Outlook: Add calendar → Subscribe from web. Keep this link private.</p>
+			<ul class="small muted feed-help">
+				<li><strong>Outlook</strong> (web or Windows): Add calendar → Subscribe from web, then paste the link.</li>
+				<li><strong>Google Calendar</strong> (on a computer): Other calendars → + → From URL.</li>
+				<li><strong>iPhone or iPad</strong>: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar.</li>
+				<li><strong>Mac</strong>: Calendar app → File → New Calendar Subscription.</li>
+			</ul>
+			<p class="small muted">Keep this link private: anyone with it can see the bookings.</p>
 		{/if}
 	</section>
 </div>
@@ -230,6 +236,16 @@
 </Sheet>
 
 <style>
+	.h3 {
+		font: 600 17px/24px var(--font-display);
+	}
+	.feed-help {
+		margin: var(--space-3) 0 var(--space-2);
+		padding-left: var(--space-5);
+	}
+	.feed-help li + li {
+		margin-top: var(--space-1);
+	}
 	.cal {
 		padding: var(--space-2);
 	}
