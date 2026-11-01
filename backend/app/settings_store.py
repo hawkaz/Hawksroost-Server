@@ -48,6 +48,8 @@ SECTIONS: dict[str, dict[str, Any]] = {
         "incident_tx_count": 6,
         "incident_window_min": 10,
         "incident_cooldown_min": 15,
+        "min_call_s": 3,           # calls shorter than this aren't saved (0 = keep everything)
+        "join_gap_s": 10,          # transmissions this close together on one channel become one call
     },
     "backup": {
         "enabled": True,

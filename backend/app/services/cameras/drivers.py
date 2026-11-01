@@ -110,6 +110,15 @@ class Driver:
     async def download(self, name: str, start_id: str, end_id: str, stream: str):
         raise NotSupported()
 
+    vod_kind = "Playback"
+
+    async def vod_url(self, name: str, stream: str, start_id: str, end_id: str) -> str:
+        """URL on the camera that plays a recording in a browser (supports byte ranges)."""
+        raise NotSupported()
+
+    async def renew_session(self) -> None:
+        """Log in again (an expired login makes the camera answer with an error page)."""
+
     async def siren(self, on: bool) -> None:
         raise NotSupported()
 
@@ -132,6 +141,7 @@ class ReolinkDriver(Driver):
         self.h = Host(self.host, self.username, self.password, port=self.port, protocol="rtsp", stream="sub", timeout=20)
         self.push_ok = False
         self.lock = asyncio.Lock()
+        self._main_names: dict[str, str] = {}
 
     async def connect(self) -> dict:
         h, ch = self.h, self.channel
@@ -234,8 +244,40 @@ class ReolinkDriver(Driver):
         out.sort(key=lambda x: x["start"], reverse=True)
         return {"days_with_recordings": days, "files": out}
 
+    async def _file_for(self, name: str, stream: str, start_id: str, end_id: str) -> str:
+        """Recording lists come from the small (sub) stream. For full quality, find the
+        main-stream file of the same recording (RecS… vs RecM… names). [VERIFY on the camera]"""
+        if stream != "main" or "RecS" not in name:
+            return name
+        if name in self._main_names:
+            return self._main_names[name]
+        try:
+            start = dt.datetime.strptime(start_id, "%Y%m%d%H%M%S")
+            end = dt.datetime.strptime(end_id, "%Y%m%d%H%M%S")
+            async with self.lock:
+                _, files = await self.h.request_vod_files(self.channel, start - dt.timedelta(minutes=1),
+                                                          end + dt.timedelta(minutes=1), stream="main")
+        except Exception as e:
+            log.info("camera %s: no full-quality match for %s (%s)", self.cam_id, name, e)
+            return name
+        for f in files:
+            if f.start_time_id == start_id:
+                self._main_names[name] = f.file_name
+                return f.file_name
+        return name
+
     async def download(self, name: str, start_id: str, end_id: str, stream: str):
+        name = await self._file_for(name, stream, start_id, end_id)
         return await self.h.download_vod(name, start_time=start_id, end_time=end_id, channel=self.channel, stream=stream)
+
+    async def vod_url(self, name: str, stream: str, start_id: str, end_id: str) -> str:
+        from reolink_aio.enums import VodRequestType
+        name = await self._file_for(name, stream, start_id, end_id)
+        _mime, url = await self.h.get_vod_source(self.channel, name, stream, VodRequestType(self.vod_kind))
+        return url
+
+    async def renew_session(self) -> None:
+        await self.h.expire_session(unsubscribe=False)
 
     async def siren(self, on: bool) -> None:
         await self.h.set_siren(self.channel, on)   # on: sounds twice, then stops by itself

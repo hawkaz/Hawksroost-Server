@@ -22,6 +22,7 @@
 	let recs = $state<{ days_with_recordings: string[]; files: Rec[] } | null>(null);
 	let recBusy = $state(false);
 	let playing = $state<Rec | null>(null);
+	let playError = $state(false);
 	let events = $state<{ id: number; type: string; at: string; snapshot: string | null }[]>([]);
 
 	async function load(quiet = false) {
@@ -332,7 +333,12 @@
 		{#if playing}
 			<section class="card stack">
 				<!-- svelte-ignore a11y_media_has_caption -->
-				<video src={fileUrl(playing, 'sub')} controls autoplay playsinline style="width:100%;border-radius:6px;background:#000"></video>
+				{#key playing.name}
+					<video src={fileUrl(playing, 'sub')} controls autoplay playsinline onerror={() => (playError = true)} style="width:100%;border-radius:6px;background:#000"></video>
+				{/key}
+				{#if playError}
+					<p class="notice warn">This recording won't play in the browser right now. Try <strong>Clip</strong> to get just the part you want, or try again in a minute.</p>
+				{/if}
 				<div class="spread wrap">
 					<span class="data">{time(playing.start)} · {duration(playing.duration_s)}</span>
 					<div class="row">
@@ -354,7 +360,7 @@
 									<span class="data">{time(r.start)}–{time(r.end)}</span>
 									<span class="small muted"> · {duration(r.duration_s)}{r.triggers.length ? ` · ${r.triggers.join(', ')}` : ''}</span>
 								</div>
-								<button class="btn icon" aria-label="Play" onclick={() => (playing = r)}><Play size={18} strokeWidth={1.75} /></button>
+								<button class="btn icon" aria-label="Play" onclick={() => ((playing = r), (playError = false))}><Play size={18} strokeWidth={1.75} /></button>
 								<button class="btn secondary" onclick={() => openClip(r)}><Scissors size={16} strokeWidth={1.75} />Clip</button>
 							</li>
 						{/each}

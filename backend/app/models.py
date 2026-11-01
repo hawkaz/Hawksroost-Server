@@ -308,3 +308,4 @@ class RadioRecording(Base):
     path: Mapped[str] = mapped_column(String(255), unique=True)
     keep: Mapped[bool] = mapped_column(Boolean, default=False)
     incident_id: Mapped[int | None] = mapped_column(ForeignKey("radio_incidents.id", ondelete="SET NULL"))
+    parts: Mapped[int] = mapped_column(Integer, default=1)   # transmissions joined into this call

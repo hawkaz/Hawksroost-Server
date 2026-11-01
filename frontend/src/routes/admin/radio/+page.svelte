@@ -107,6 +107,8 @@
 
 	const F: Field[] = [
 		{ key: 'enabled', label: 'Radio scanner on', type: 'checkbox' },
+		{ key: 'join_gap_s', label: 'Join replies within this many seconds into one call', type: 'number', help: 'A transmission that follows the last one on the same channel within this time is added to the same recording, so a back-and-forth is one call. 0 saves every transmission on its own.' },
+		{ key: 'min_call_s', label: 'Don’t save calls shorter than (seconds)', type: 'number', help: 'Counts the whole call after joining. Gets rid of key-ups and static bursts. 0 keeps everything.' },
 		{ key: 'max_storage_gb', label: 'Storage limit for calls (GB)', type: 'number', help: 'Oldest calls are removed first. Kept calls are never removed.' },
 		{ key: 'max_age_days', label: 'Keep calls for (days)', type: 'number' },
 		{ key: 'incident_tx_count', label: 'Busy alert: this many calls…', type: 'number' },

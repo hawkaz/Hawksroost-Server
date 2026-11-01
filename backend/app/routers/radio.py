@@ -63,7 +63,7 @@ def _chan(c: RadioChannel) -> dict:
 def _rec(r: RadioRecording, groups: dict[int, str]) -> dict:
     return {"id": r.id, "channel_id": r.channel_id, "group": groups.get(r.channel_id), "label": r.label,
             "freq_mhz": r.freq_mhz, "started_at": iso(r.started_at), "duration_s": round(r.duration_s, 1),
-            "size_bytes": r.size_bytes, "keep": r.keep, "incident_id": r.incident_id,
+            "size_bytes": r.size_bytes, "keep": r.keep, "incident_id": r.incident_id, "parts": r.parts or 1,
             "url": f"/api/radio/recordings/{r.id}/audio"}
 
 
@@ -138,6 +138,19 @@ def set_keep(rec_id: int, body: KeepIn, db: Session = Depends(get_db), _: User =
     r.keep = body.keep
     db.commit()
     return {"keep": r.keep}
+
+
+@router.delete("/api/radio/recordings/{rec_id}", status_code=204, dependencies=[Depends(admin)])
+def delete_recording(rec_id: int, db: Session = Depends(get_db)):
+    """Delete a call and its audio file (kept calls too: an admin asked for it)."""
+    r = db.get(RadioRecording, rec_id)
+    if r is None:
+        return
+    path = (config.RECORDINGS_DIR / r.path).resolve()
+    if path.is_relative_to(config.RECORDINGS_DIR.resolve()):
+        path.unlink(missing_ok=True)
+    db.delete(r)
+    db.commit()
 
 
 @router.get("/api/radio/incidents")

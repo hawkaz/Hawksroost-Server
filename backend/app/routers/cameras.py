@@ -11,7 +11,7 @@ from typing import Literal
 
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
@@ -23,7 +23,7 @@ from ..deps import admin, camera_control, optional_user, viewer
 from ..models import Camera, CameraEvent, User
 from ..security import can
 from ..services import clips
-from ..services.cameras import KINDS, PTZ_COMMANDS, manager, stream_names, test_connection
+from ..services.cameras import KINDS, PTZ_COMMANDS, RecordingUnavailable, manager, stream_names, test_connection
 from ..timeutil import LOCAL_TZ, iso
 from ..web import sign, unsign
 
@@ -136,25 +136,30 @@ async def recordings(cam_id: int, day: date, _: User = Depends(viewer)):
 
 
 @router.get("/api/cameras/{cam_id}/recordings/file")
-async def recording_file(cam_id: int, name: str, start_id: str, end_id: str,
+async def recording_file(cam_id: int, name: str, start_id: str, end_id: str, request: Request,
                          stream: Literal["main", "sub"] = "sub", download: bool = False,
                          _: User = Depends(viewer)):
-    """Stream a recording from the camera through the app (the camera isn't on the internet)."""
-    vod = await manager.download(cam_id, name, start_id, end_id, stream)
+    """Play or save a recording from the camera's card, through the app (the camera isn't on
+    the internet). The browser's Range requests go to the camera, so playback starts right
+    away and seeking works, the way Home Assistant does it."""
+    fwd = {k: v for k in ("range", "if-range") if (v := request.headers.get(k))}
+    try:
+        client, resp = await manager.open_recording(cam_id, name, stream, start_id, end_id, fwd)
+    except RecordingUnavailable:
+        raise HTTPException(502, "The camera wouldn't send that recording. Try again in a minute.")
 
     async def body():
         try:
-            async for chunk in vod.stream.iter_chunked(64 * 1024):
+            async for chunk in resp.aiter_raw(64 * 1024):
                 yield chunk
         finally:
-            vod.close()
+            await resp.aclose()
+            await client.aclose()
 
+    headers = {k: resp.headers[k] for k in ("content-length", "content-range", "accept-ranges") if k in resp.headers}
     filename = f"camera{cam_id}-{start_id}-{stream}.mp4"
-    disposition = "attachment" if download else "inline"
-    headers = {"Content-Disposition": f'{disposition}; filename="{filename}"'}
-    if vod.length:
-        headers["Content-Length"] = str(vod.length)
-    return StreamingResponse(body(), media_type="video/mp4", headers=headers)
+    headers["Content-Disposition"] = f'{"attachment" if download else "inline"}; filename="{filename}"'
+    return StreamingResponse(body(), status_code=resp.status_code, media_type="video/mp4", headers=headers)
 
 
 # --- Clips: a short piece of a long recording ------------------------------------------------

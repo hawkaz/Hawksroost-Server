@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Download, Headphones, Pause, Play, Star } from '@lucide/svelte';
+	import { Download, Headphones, Pause, Play, Star, Trash2 } from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
 	import { ago, dayTime, duration } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -14,7 +14,7 @@
 		incidents: { id: number; label: string; started_at: string; tx_count: number }[];
 	}
 	interface Channel { id: number; group: string; label: string; freq_mhz: number; incident: boolean }
-	interface Rec { id: number; channel_id: number | null; group: string | null; label: string; freq_mhz: number | null; started_at: string; duration_s: number; keep: boolean; url: string }
+	interface Rec { id: number; channel_id: number | null; group: string | null; label: string; freq_mhz: number | null; started_at: string; duration_s: number; keep: boolean; parts: number; url: string }
 
 	let status = $state<Status | null>(null);
 	let channels = $state<Channel[]>([]);
@@ -79,6 +79,17 @@
 			toast.error(e);
 		}
 	}
+	async function remove(r: Rec) {
+		if (!confirm(`Delete this ${r.label} call from ${dayTime(r.started_at)}?${r.keep ? ' It’s marked to keep.' : ''}`)) return;
+		try {
+			await api.del(`/api/radio/recordings/${r.id}`);
+			if (current?.id === r.id) current = null;
+			recs = recs.filter((x) => x.id !== r.id);
+			toast.show('Call deleted.');
+		} catch (e) {
+			toast.error(e);
+		}
+	}
 	const activeIds = $derived(new Set(status?.active.map((a) => a.channel_id)));
 </script>
 
@@ -136,7 +147,7 @@
 							</button>
 							<div class="grow">
 								<div class:hot={r.channel_id !== null && activeIds.has(r.channel_id)}>{r.label}</div>
-								<div class="small muted"><span class="data">{dayTime(r.started_at)}</span> · {duration(r.duration_s)}{r.freq_mhz ? ` · ${freq(r.freq_mhz)}` : ''}</div>
+								<div class="small muted"><span class="data">{dayTime(r.started_at)}</span> · {duration(r.duration_s)}{r.parts > 1 ? ` · ${r.parts} transmissions` : ''}{r.freq_mhz ? ` · ${freq(r.freq_mhz)}` : ''}</div>
 							</div>
 							{#if session.can('edit')}
 								<button class="btn icon" aria-label={r.keep ? 'Stop keeping' : 'Keep'} aria-pressed={r.keep} onclick={() => keep(r)}>
@@ -144,6 +155,9 @@
 								</button>
 							{:else if r.keep}<Star size={18} strokeWidth={1.75} fill="currentColor" />{/if}
 							<a class="btn icon" href={`${r.url}?download=1`} aria-label="Download"><Download size={18} strokeWidth={1.75} /></a>
+							{#if session.can('admin')}
+								<button class="btn icon" aria-label="Delete this call" onclick={() => remove(r)}><Trash2 size={18} strokeWidth={1.75} /></button>
+							{/if}
 						</li>
 					{/each}
 				</ul>

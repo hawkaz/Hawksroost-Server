@@ -180,3 +180,89 @@ def test_presets_follow_the_camera(client, monkeypatch):
     finally:
         cams.manager.conns.pop(cam_id, None)
         PresetCamera.on_camera = [{"id": "1", "name": "Driveway"}, {"id": "2", "name": "Lake"}]
+
+
+# --- Recordings play through the app with byte ranges (like Home Assistant) ---------------
+
+import httpx  # noqa: E402
+
+VIDEO = bytes(range(256)) * 40   # 10,240 bytes standing in for an MP4 on the card
+
+
+class RecordingCamera(FakeDriver):
+    flv_first = False
+    renewed = 0
+
+    async def vod_url(self, name, stream, start_id, end_id):
+        return f"http://camera.test/cgi-bin/api.cgi?cmd={self.vod_kind}&source={name}"
+
+    async def renew_session(self):
+        RecordingCamera.renewed += 1
+
+
+def fake_camera(mode="ok"):
+    def handler(request: httpx.Request):
+        if mode == "html":
+            return httpx.Response(200, headers={"content-type": "text/html"}, content=b"<html>login</html>")
+        if mode == "flv" and "cmd=Playback" in str(request.url):
+            return httpx.Response(200, headers={"content-type": "video/x-flv"}, content=b"FLV")
+        rng = request.headers.get("range")
+        if rng:
+            a, b = (int(x) for x in rng.removeprefix("bytes=").split("-"))
+            part = VIDEO[a:b + 1]
+            return httpx.Response(206, stream=httpx.ByteStream(part), headers={
+                "content-type": "video/mp4", "accept-ranges": "bytes",
+                "content-range": f"bytes {a}-{b}/{len(VIDEO)}", "content-length": str(len(part))})
+        return httpx.Response(200, stream=httpx.ByteStream(VIDEO), headers={
+            "content-type": "apolication/octet-stream", "accept-ranges": "bytes", "content-length": str(len(VIDEO))})
+    return httpx.MockTransport(handler)
+
+
+def _recording_setup(client, mode):
+    login(client, "viewer")
+    with SessionLocal() as db:
+        cam = Camera(name="Deck", kind="stream", host="h", options={"main_url": "rtsp://h/main"})
+        db.add(cam)
+        db.commit()
+        cam_id = cam.id
+    driver = RecordingCamera(cam_id, "h", None, "", "", 0, {})
+    cams.manager.conns[cam_id] = cams.Conn(cam_id=cam_id, driver=driver, online=True)
+    cams.VOD_TRANSPORT = fake_camera(mode)
+    url = f"/api/cameras/{cam_id}/recordings/file?name=RecS01_x.mp4&start_id=20260704180000&end_id=20260704181000"
+    return cam_id, driver, url
+
+
+def test_recording_plays_with_ranges(client):
+    cam_id, driver, url = _recording_setup(client, "ok")
+    try:
+        r = client.get(url, headers={"Range": "bytes=100-199"})
+        assert r.status_code == 206 and r.content == VIDEO[100:200]
+        assert r.headers["content-range"] == "bytes 100-199/10240" and r.headers["content-type"] == "video/mp4"
+        r = client.get(url)
+        assert r.status_code == 200 and r.content == VIDEO and r.headers["accept-ranges"] == "bytes"
+        assert client.get(url + "&download=1").headers["content-disposition"].startswith("attachment")
+    finally:
+        cams.manager.conns.pop(cam_id, None)
+        cams.VOD_TRANSPORT = None
+
+
+def test_recording_falls_back_from_flv(client):
+    cam_id, driver, url = _recording_setup(client, "flv")
+    try:
+        r = client.get(url)
+        assert r.status_code == 200 and r.content == VIDEO and driver.vod_kind == "Download"
+    finally:
+        cams.manager.conns.pop(cam_id, None)
+        cams.VOD_TRANSPORT = None
+
+
+def test_recording_refused_reads_plainly(client):
+    RecordingCamera.renewed = 0
+    cam_id, driver, url = _recording_setup(client, "html")
+    try:
+        r = client.get(url)
+        assert r.status_code == 502 and "wouldn't send" in r.json()["detail"]
+        assert RecordingCamera.renewed == 3   # logged in again before each retry
+    finally:
+        cams.manager.conns.pop(cam_id, None)
+        cams.VOD_TRANSPORT = None

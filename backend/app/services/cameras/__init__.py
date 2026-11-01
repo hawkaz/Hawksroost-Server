@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, timedelta
 from pathlib import Path
 
+import httpx
 from sqlalchemy import select
 
 from ... import config, push, settings_store
@@ -21,8 +22,8 @@ from ...timeutil import LOCAL_TZ, utcnow
 from .. import go2rtc
 from .drivers import KINDS, PTZ_COMMANDS, Driver, NotSupported, go2rtc_frame, make_driver
 
-__all__ = ["KINDS", "PTZ_COMMANDS", "CameraOffline", "NotSupported", "cleanup_old_events", "manager",
-           "stream_names", "test_connection"]
+__all__ = ["KINDS", "PTZ_COMMANDS", "CameraOffline", "NotSupported", "RecordingUnavailable", "cleanup_old_events",
+           "manager", "stream_names", "test_connection"]
 
 log = logging.getLogger("hawk.cameras")
 HEARTBEAT_S = 120
@@ -34,6 +35,15 @@ def stream_names(cam_id: int) -> dict[str, str]:
 
 class CameraOffline(Exception):
     pass
+
+
+class RecordingUnavailable(Exception):
+    pass
+
+
+VOD_TRANSPORT: httpx.AsyncBaseTransport | None = None   # tests swap in a fake camera
+# Reolink sends video/mp4, or octet-stream (sometimes spelled "apolication").
+VIDEO_TYPES = {"video/mp4", "application/octet-stream", "apolication/octet-stream"}
 
 
 @dataclass
@@ -283,6 +293,31 @@ class CameraManager:
 
     async def download(self, cam_id: int, file_name: str, start_id: str, end_id: str, stream: str):
         return await self._driver(cam_id).download(file_name, start_id, end_id, stream)
+
+    async def open_recording(self, cam_id: int, name: str, stream: str, start_id: str, end_id: str,
+                             headers: dict[str, str]) -> tuple[httpx.AsyncClient, httpx.Response]:
+        """Open a recording on the camera for playing, passing the browser's Range header
+        through so playback starts at once and seeking works. The caller closes both."""
+        driver = self._driver(cam_id)
+        client = httpx.AsyncClient(verify=False, timeout=httpx.Timeout(20, read=60), transport=VOD_TRANSPORT)
+        try:
+            for _ in range(3):
+                url = await driver.vod_url(name, stream, start_id, end_id)
+                resp = await client.send(client.build_request("GET", url, headers=headers), stream=True)
+                ctype = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+                if ctype == "video/x-flv" and driver.vod_kind == "Playback":
+                    await resp.aclose()
+                    driver.vod_kind = "Download"   # this camera's Playback sends FLV; browsers need MP4
+                    continue
+                if resp.status_code in (200, 206) and ctype in VIDEO_TYPES:
+                    return client, resp
+                log.info("camera %s: recording answer %s %s; logging in again", cam_id, resp.status_code, ctype)
+                await resp.aclose()
+                await driver.renew_session()
+            raise RecordingUnavailable()
+        except BaseException:
+            await client.aclose()
+            raise
 
     async def siren(self, cam_id: int, on: bool) -> None:
         await self._driver(cam_id).siren(on)

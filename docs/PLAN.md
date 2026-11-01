@@ -126,6 +126,11 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 - **Starlink availability** = share of seconds where not every ping failed,
   counted only while the laptop was on.
 
+- **Radio calls:** default join gap 10 s and minimum call 3 s (Chris's example).
+  Joined calls have no silence between transmissions (shorter to listen to).
+  A busy channel is still split into calls of at most 15 minutes. Incidents
+  count transmissions, not calls. Deleting calls is admin-only.
+
 ## Still open
 
 | Question | Needed by |
@@ -213,3 +218,10 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   right of the calendar on wide screens (stacked below 1150px). Shopping is
   its own page (`/shopping`); To-do and other lists stay at `/lists`
   (old `?tab=shopping` links redirect). Phones show five tabs + More.
+- 2026-11-01 — Radio: transmissions on a channel within the join gap become
+  one recording; calls under the minimum length aren't saved (both in Admin →
+  Radio); admins can delete calls (migration 0004 adds `parts`). Tested with
+  real MP3s made by ffmpeg. Camera recordings: play through the camera's
+  Playback URL with Range passed through (Download fallback when it answers
+  FLV), tested against a fake camera; "Full quality" looks up the matching
+  main-stream file. 57 tests pass.
