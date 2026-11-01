@@ -140,6 +140,8 @@ Each has its own page under **Admin**:
   ```
 
   Paste the output back to Claude. If live video won't play, run `bash /opt/hawksroost/scripts/camera-check.sh` (read-only; passwords are masked) and send Claude the output.
+
+  **Faster live view (optional):** a live picture can only start at a keyframe, so the time between keyframes on the camera's small (Fluent) stream is the wait when you open a camera. Reolink's phone app doesn't have this setting. On a computer at the cabin, open the camera's address in a browser (or the desktop Reolink Client: Camera Settings → Device → Stream → Settings) → **Device → Stream → Fluent → I-frame Interval → 1x** → Save. 1x is one keyframe a second; it uses a little more of the cabin's upload only while someone watches. [VERIFY the menu names on this camera]
 - **Weather:** nothing to enter for live data. Enter the station's elevation in feet (about 7,100 at Mormon Lake [VERIFY the station's own]) to show sea-level pressure. Optional token + station ID for the forecast.
 - **Starlink:** the default `192.168.100.1:9200` normally works. Dish restart, stow and the night sleep schedule are on the same page. Check:
 
@@ -213,7 +215,7 @@ cd /opt/hawksroost && docker compose start api collector
 
    OpenWebRX, which used to hold the dongle, was already removed by `server-prep.sh`.
 
-Hardware notes: [RADIO.md](RADIO.md).
+How calls are saved, live listening and tuning to one frequency: [RADIO.md](RADIO.md#in-the-app). Hardware notes are there too.
 
 ## Useful
 

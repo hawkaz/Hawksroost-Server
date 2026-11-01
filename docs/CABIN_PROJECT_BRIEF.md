@@ -2,7 +2,9 @@
 
 Owner: Chris (IT director; ham radio and home-automation hobbyist; Microsoft shop at work)
 Prepared: 2026-10-30
-Status: Requirements and research done. Next: finish planning with Chris, then build in phases.
+Status: The original brief, kept for its requirements and device research. Built
+since; where this file and [PLAN.md](PLAN.md) differ (remote access, email,
+cameras, Argus, radio), PLAN.md's decisions are current.
 
 ---
 

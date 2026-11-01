@@ -57,7 +57,7 @@ bash /opt/hawksroost/scripts/update.sh
 | Host | Dell Latitude 5420, Debian 13 (hostname HAWKSROOST), Docker Compose. Nothing else runs in Docker (Home Assistant, Watchtower etc. retired). Pin third-party image tags; our services carry the Watchtower opt-out label in case it returns. |
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2 + Alembic, SQLite (WAL mode), pydantic-settings. **One uvicorn worker**: background jobs run in-process. |
 | Frontend | SvelteKit **3** + Svelte 5 runes + TypeScript, `adapter-static` SPA (`200.html` fallback), plain CSS using brand tokens (no Tailwind or UI kits), `@lucide/svelte` icons, `@fontsource` latin subsets. Kit 3 notes: config lives in `vite.config.ts`; `$lib` is gone — import `#lib/...` **with the file extension** (`#lib/api.ts`, `#lib/session.svelte.ts`); service worker uses `$app/manifest` + `$app/environment`. |
-| PWA | Manifest + service worker; Web Push with VAPID (`pywebpush`). iOS push needs Add to Home Screen (16.4+). |
+| PWA | Manifest + service worker; Web Push with VAPID (`pywebpush`, RFC 8292 headers via `Vapid02`, 10 s timeout). iOS push needs Add to Home Screen (16.4+). A device's subscription follows whoever signs in; signing out unsubscribes it. |
 | Email | Brevo transactional API (`mailer.py`, httpx): only an API key + send-from address in Admin → Sign-in & email; sender name = app name. |
 | Auth | Invite-only. Google (OAuth code flow via httpx) or email/password (argon2). Server-side sessions in SQLite, cookie `HttpOnly; SameSite=Lax` (`Secure` over HTTPS). Roles `viewer` / `member` / `admin`. |
 | Camera recordings | Played via the camera's Playback URL (Download if it answers FLV), proxied by the api with the browser's Range header passed through, as Home Assistant does; logs in again on an error page. "Full quality" finds the RecM file matching the RecS one [VERIFY]. |
@@ -88,7 +88,8 @@ tap, live view auto-stops when idle, no prefetching. Video stays behind `/video/
   section there and a page under `routes/admin/` (listed in
   `lib/components/admin/sections.ts`). **Don't add
   integration settings to `.env`.** `.env` holds only the Cloudflare DNS token and a few
-  server options. Never commit secrets, recordings, or `data/`.
+  server options. Never commit secrets, recordings, or `data/`. Number settings get a
+  range in `settings_store.LIMITS` (out of range or blank → 422 with a plain message).
 - **Devices: probe before building.** Write a small probe script in
   `backend/probes/` for each integration, have Chris run it on the real hardware,
   and record results in `docs/probes/`. Never invent API commands, stream paths,
@@ -100,11 +101,16 @@ tap, live view auto-stops when idle, no prefetching. Video stays behind `/video/
 - **Security:** only Caddy (80/443) faces the internet; it proxies to the app. The camera
   webhook receiver is plain HTTP on the LAN IP only. Never publish camera, go2rtc
   admin, Icecast admin, or SDR ports to the internet. Use a dedicated non-admin
-  camera account where possible.
+  camera account where possible. nginx passes only `src=cam<N>_(sub|main|tele)` to
+  go2rtc's websocket (go2rtc would open any URL given there). Security headers live in
+  `frontend/nginx-headers.conf`, included in every location that adds its own headers.
 - **Time:** store UTC; display `America/Phoenix` (no DST).
 - **Logs:** to stdout; every compose service sets `logging: max-size 10m, max-file 3`.
-- **Health:** each integration reports to the health page (reachable, last data time).
-- **Database:** Alembic migrations, applied automatically when `api` starts.
+- **Health:** each integration reports to the health page (reachable, last data time):
+  `ok` true / false, or null for optional things that aren't set up.
+- **Database:** Alembic migrations, applied automatically when `api` starts, with
+  foreign keys off (SQLite rebuilds tables; cascades would delete rows).
+  `tests/test_migrations.py` runs `alembic check`: change a model, add a migration.
 - **Tests before pushing:** `pytest` for backend logic (auth/invites, permissions,
   reservation overlap, list history); `npm run check` and `npm run build` for the
   frontend. Say plainly if something couldn't be tested here (most device work can't).
@@ -141,8 +147,12 @@ tap, live view auto-stops when idle, no prefetching. Video stays behind `/video/
 - **Size:** tap targets ≥44px; body text ≥15px on mobile.
 - **Colour meaning:** red and pulsing only for live radio activity and alerts.
   Status colours only for meaning.
-- **Cameras:** 16:9 tiles, name + timestamp on a bottom scrim.
-- **Radio:** never autoplay; the user taps to listen.
+- **Cameras:** 16:9 tiles, name + timestamp on a bottom scrim (tiles only; the live
+  player leaves the bottom to the browser's video controls).
+- **Radio:** never autoplay; the user taps to listen. One `<audio>` element stays on
+  the page and starts inside the tap (iPhones block sound started later).
+- **Messages and switches:** `toast` for results and errors; while a `Sheet` is open
+  they show inside it. On/off settings use `Switch` (44px).
 - **Calendar:** visits only (no delivery/repair entries). A visit has the people
   coming (app users) plus "anyone else" text; filled with the first person's
   family colour (8 options, per-person setting); today copper-outlined.

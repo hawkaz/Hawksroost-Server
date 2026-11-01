@@ -4,22 +4,23 @@ Living document. Update it as work lands.
 Requirements and device research: [CABIN_PROJECT_BRIEF.md](CABIN_PROJECT_BRIEF.md).
 How to install and run: [DEPLOY.md](DEPLOY.md). Radio hardware: [RADIO.md](RADIO.md).
 
-## Status (2026-11-01)
+## Status (2026-11-01, after the full review)
 
-**All phases are built and tested in a container; the laptop is prepared and the
-front door (Caddy + Let's Encrypt + DDNS) works.** The 2026-11-01 redesign
-(below) is built and tested here, not yet on the laptop. Next needs Chris:
-`scripts/update.sh`, first admin invite, then integrations in the app.
+**Everything is built and running on the cabin laptop** at https://hawksroost.live:
+Chris's admin account, the Reolink camera (live view, presets) and the radio
+scanner (recording calls) are in use. The full code and design review (build log,
+last entry) is pushed; it takes effect with `scripts/update.sh`. Items marked
+[VERIFY] below can only be checked on the real devices.
 
-| Phase | State | Verified on real hardware? |
+| Area | State | Checked on real hardware? |
 |---|---|---|
-| 0 Host prep | Scripts + guide written | No — needs Chris |
-| 1 Foundation (auth, roles, PWA, push, backups, health, sign-in photo) | Built, tested | No |
-| 2 Household (calendar, shopping, to-do) | Built, tested | n/a |
-| 3 Weather + Starlink (separate pages) | Built; tested with simulated data | No — [VERIFY] |
-| 4 Cameras (Reolink, ONVIF, stream URL; live, PTZ, presets, recordings, clips, pictures, alerts, siren, light) | Built on drivers; clip cutting tested with a generated video | No — [VERIFY] on the real camera: streams, zoom-lens stream, PTZ, SD search/download, push events, siren, light |
-| 5 Argus | Skipped (decision) | — |
-| 6 Radio | Built; researched Mormon Lake list (docs/RADIO.md) with repeater tones; generated config parses in RTLSDR-Airband | No — needs dongle |
+| Host prep, front door (Caddy + Let's Encrypt + DDNS) | Done | Yes |
+| Sign-in, roles, PWA, push, backups, health, sign-in photo | Built, tested | Sign-in yes; iPhone notifications [VERIFY] after the review (push headers changed) |
+| Calendar, Shopping, Lists | Built, tested | n/a |
+| Weather + Starlink (own pages) | Built; tested with simulated data | [VERIFY] with the real station and dish |
+| Cameras (Reolink, ONVIF, stream URL; live, PTZ, presets, recordings, clips, pictures, alerts, siren, light) | Built on drivers; clip cutting tested with a generated video | Live view, presets: yes. [VERIFY]: recordings playback, clips, push events, siren, light |
+| Argus | Skipped (decision) | — |
+| Radio (calls, live listening, tuning) | Built; Mormon Lake list in docs/RADIO.md | Recording: yes. [VERIFY]: live listening reconnecting after a retune |
 
 ## Decisions
 
@@ -140,6 +141,28 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 - **Manual radio tuning** is a member control (like pan/tilt) and returns to
   scanning after 1 hour unless set otherwise, so fire calls aren't missed.
 
+- **Full review (2026-11-01):**
+  - **Push** now uses the standard VAPID header (RFC 8292) instead of the old
+    draft one. Same keys, so devices stay subscribed. If iPhone notifications
+    never arrived before, they may now [VERIFY].
+  - **Signing out** turns off notifications on that device (it may be a shared
+    tablet). A device that already has them on sends them to whoever signs in.
+  - **Number settings** have limits, and a cleared box is refused rather than
+    saved as 0: join gap 0–120 s, shortest call 0–120 s, storage 1–10,000 GB,
+    keep calls 1–3,650 days, busy alert 2–500 calls in 1–240 minutes, quiet
+    1–1,440 minutes, backup hour 0–23, backups kept 1–365 days, station
+    elevation −1,000 to 15,000 ft, seconds between camera alerts 0–86,400.
+  - **Live view** pauses after 5 minutes without a tap, click or key on the
+    page (was 5 minutes regardless), so steering the camera never gets cut off.
+  - **Shopping:** removing an item offers Undo for 6 seconds; Undo adds it back
+    (it shows as newly added). Old delivery/repair entries can be deleted, not
+    edited (editing turned them into visits).
+  - **Admin → System:** optional things that aren't set up (email, Google) show
+    a grey circle instead of counting as problems.
+  - **Video:** the web server only passes our own camera streams to go2rtc;
+    anything else in the address is refused (it could make go2rtc open any
+    address on the cabin network).
+
 ## Still open
 
 | Question | Needed by |
@@ -147,6 +170,8 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
 | Power-loss test (skipped by Chris 2026-10-31; Wake on AC set in BIOS, untested) | Optional |
 | Camera probe output (now also siren/light support) | Camera |
 | Listen-test Sheriff and Mormon Lake FD channels (may be P25 / unconfirmed) | Radio |
+| Faster live view: set the camera's Fluent-stream I-frame interval to the smallest (DEPLOY.md, Cameras) [VERIFY setting name] | Camera |
+| iPhone notifications after the push change; live listening coming back after a retune | After update |
 | Delete old branches + set `main` default in GitHub | Any time (Chris) |
 
 ## Architecture
@@ -240,3 +265,31 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   Weather icons on Weather and Today (station first, Tempest forecast, then
   sunlight vs clear sky). Radio: tune to one frequency (FM/AM, auto-return to
   scanning) or scan. 62 tests pass.
+- 2026-11-01 — Full review (Chris asked for efficiency, bugs, cleanup, design
+  and docs). Two independent reviews (backend, frontend), each finding checked
+  before fixing, with tests:
+  - **Speed:** live video starts in about 1–2 s here (player without go2rtc's
+    overlay, sub-stream kept connected, player loaded while the page loads,
+    camera list no longer waits on a slow camera); switching quality hangs up
+    the old stream at once; radio live should start ~4 s behind instead of
+    ~30 s (smaller Icecast burst, worked out from the recorder's bitrate;
+    [VERIFY] by ear); history pages cached; gzip on the LAN.
+  - **Bugs fixed:** making a clip always said "busy"; two clips of one
+    recording clashed; a minute of Starlink data split across two polls kept
+    only its second half; quick double saves left two camera connections
+    running; cleared number settings saved as 0/blank (could empty backups or
+    radio calls); pan/tilt Stop could overtake the move; a near-flat chart
+    could freeze the Weather page; messages were hidden behind open forms;
+    a dropped connection at start signed people out; stale answers showed
+    under a newer selection; camera tiles stuck on Offline; radio sound didn't
+    start on iPhones and stopped for good when the recorder restarted.
+  - **Safety:** migrations run with foreign keys off (rebuilding a table could
+    have deleted every row pointing at it, e.g. all bookings); video gate;
+    security headers on every response; push requests time out.
+  - **Cleanup:** unused routes, columns (migration 0006), helpers, CSS and a
+    service-worker branch removed.
+  - **Design:** Radio and Today use side-by-side columns on wide screens,
+    tighter rows on Today, channels grouped with switches in Admin → Radio,
+    44 px tap targets everywhere, notch-safe edges on tablets.
+  - 72 backend tests pass (new: migrations match the models, push headers,
+    settings limits, clip API, camera reload race, Starlink merge).

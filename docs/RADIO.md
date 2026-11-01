@@ -3,6 +3,28 @@
 The software side (channels, scan settings, retention) is set in the app:
 **Admin → Radio**. "Load Mormon Lake list" adds everything below.
 
+## In the app
+
+- **Calls, not fragments.** The recorder saves one file per transmission. The app
+  joins transmissions on the same channel that come less than the **join time**
+  apart (Admin → Radio, default 10 s) into one call, and doesn't keep calls
+  shorter than the **shortest call** (default 3 s; key-ups and static). A call
+  shows up once its channel has been quiet for the join time. A very busy channel
+  is still split into calls of at most 15 minutes.
+- **Keep and delete.** Members can star a call to keep it; kept calls are never
+  cleaned up. Admins can delete calls. Otherwise the oldest go first when the
+  storage limit or the days limit is reached.
+- **Listen live** plays the scanner as it happens, about 4 seconds behind. It
+  starts only when you tap (never on its own).
+- **Tuning.** Members can sit the dongle on one frequency (FM or AM) from the Radio
+  page; it goes back to scanning after the time picked (default 1 hour) so fire
+  calls aren't missed. Calls on that frequency are recorded like any other.
+- **Restarts.** Tuning (and its return to scanning) and Apply rewrite the recorder's
+  settings, and the recorder restarts for a few seconds. Live listening reconnects
+  by itself.
+- **Busy alerts.** Channels marked for alerts notify people who turned on "When the
+  radio gets busy" (Settings) when they pass the busy count within the busy window.
+
 ## RTL-SDR Blog V4
 
 - The V4 needs the RTL-SDR Blog driver fork. The recorder image
