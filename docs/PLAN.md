@@ -33,7 +33,7 @@ front door (Caddy + Let's Encrypt + DDNS) works.** The 2026-11-01 redesign
 | D7 | Domain | hawksroost.live on Cloudflare DNS | 2026-10-31 |
 | D8 | Roles | viewer / member / admin (see below) | 2026-10-31 |
 | — | Bookings | Open booking; overlapping stays allowed but flagged | 2026-10-31 |
-| — | Email | Brevo (SMTP), configured in the app | 2026-10-31 |
+| — | Email | Brevo, configured in the app. ~~SMTP~~ → **Brevo API: just an API key + send-from address** (Chris, 2026-11-01) | 2026-11-01 |
 | — | Integrations | All set up in the admin UI, not in files. `.env` holds only the Cloudflare DNS token and a few server options | 2026-10-31 |
 | — | Backups | Nightly local SQLite copies only; no off-site | 2026-10-31 |
 | — | Git | Everything on `main`, no branches | 2026-10-31 |
@@ -200,3 +200,7 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   double-tap), tested in a browser with a stand-in video. The camera reports no
   camera-side zoom over its API (its "hybrid zoom" is the second lens plus
   digital cropping); the probe now prints its zoom fields to confirm.
+- 2026-11-01 — Light is one on/off switch showing its real state; siren and
+  auto-tracking are admin-only. Email switched from SMTP to Brevo's API
+  (API key + send-from address only), checked against Brevo's OpenAPI spec;
+  invites still work (link shown) if an email fails. 48 tests pass.

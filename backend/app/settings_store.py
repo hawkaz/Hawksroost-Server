@@ -23,14 +23,9 @@ SECTIONS: dict[str, dict[str, Any]] = {
         "client_id": "",
         "client_secret": "",
     },
-    "email": {
-        "enabled": False,
-        "host": "smtp-relay.brevo.com",
-        "port": 587,
-        "username": "",
-        "password": "",
-        "from_email": "",
-        "from_name": "Hawksroost",
+    "email": {                     # Brevo transactional email API
+        "api_key": "",
+        "from_email": "",          # on a domain verified in Brevo, e.g. cabin@hawksroost.live
     },
     "tempest": {
         "enabled": True,
@@ -69,7 +64,7 @@ SECTIONS: dict[str, dict[str, Any]] = {
 
 SECRETS: dict[str, set[str]] = {
     "google": {"client_secret"},
-    "email": {"password"},
+    "email": {"api_key"},
     "tempest": {"api_token"},
     "push": {"vapid_private_pem"},
 }

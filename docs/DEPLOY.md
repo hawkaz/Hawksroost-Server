@@ -147,10 +147,11 @@ Each has its own page under **Admin**:
   cd /opt/hawksroost && docker compose exec collector python -m probes.starlink
   ```
 
-- **Sign-in & email → Email (Brevo)** — sending from `cabin@hawksroost.live`:
+- **Sign-in & email → Email (Brevo)** — just an API key and a send-from address (`cabin@hawksroost.live`):
   1. Brevo → **Senders, Domains & Dedicated IPs → Domains → Add a domain** → `hawksroost.live`.
   2. Brevo lists DNS records (a Brevo code TXT, DKIM, DMARC). Add each in Cloudflare → hawksroost.live → **DNS** (DNS only, not proxied) → back in Brevo, **Verify**. Brevo may offer to do this automatically for Cloudflare.
-  3. In the app's Email card: SMTP login and SMTP key from Brevo → **SMTP & API → SMTP**; from address `cabin@hawksroost.live` → **Send test**.
+  3. Brevo → **SMTP & API → API keys → Generate** (labels vary a little by version [VERIFY]). Name it `hawksroost`, leave MCP off, pick no expiry or the longest offered, copy the key (starts with `xkeysib-`; shown once).
+  4. In the app's Email card: paste the key, send-from `cabin@hawksroost.live` → **Save** → **Send test**. If Brevo blocks the laptop's IP address, its error says so; allow it in Brevo's security settings [VERIFY].
 
   Replies to that address go nowhere unless you forward it (Cloudflare → Email → Email Routing, free) [VERIFY current menu].
 - **Sign-in & email → Google sign-in:** follow the steps on that card; it shows the redirect URI to paste into Google Cloud.

@@ -1,4 +1,5 @@
 """Admin: people, invites, integration settings, health."""
+import logging
 import shutil
 from datetime import timedelta
 
@@ -18,6 +19,7 @@ from ..web import base_url
 from .auth import google_redirect_uri, make_reset_link
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(admin)])
+log = logging.getLogger("hawk.admin")
 
 
 # --- People --------------------------------------------------------------------------
@@ -126,8 +128,8 @@ async def create_invite(body: InviteIn, request: Request, db: Session = Depends(
                               f"Hi{(' ' + body.name) if body.name else ''},\n\n{me.name} invited you to {site}, "
                               f"the family cabin app.\n\nSet up your account here (good for {body.days} days):\n{url}\n")
             emailed = True
-        except mailer.EmailNotConfigured:
-            pass
+        except (mailer.EmailNotConfigured, mailer.EmailFailed) as e:
+            log.warning("invite email not sent: %s", e)   # the link is still shown to the admin
     return {**_invite_out(inv, url), "emailed": emailed}
 
 
@@ -188,9 +190,9 @@ async def test_email(body: TestEmailIn, db: Session = Depends(get_db)):
     try:
         await mailer.send(db, body.to, "Test email from the cabin app", "If you can read this, email works.")
     except mailer.EmailNotConfigured:
-        raise HTTPException(400, "Turn email on and fill in the server, login and from address first.")
-    except Exception as e:
-        raise HTTPException(400, f"Sending failed: {e}")
+        raise HTTPException(400, "Enter the Brevo API key and the send-from address, and save, first.")
+    except mailer.EmailFailed as e:
+        raise HTTPException(400, str(e))
     return {"ok": True}
 
 

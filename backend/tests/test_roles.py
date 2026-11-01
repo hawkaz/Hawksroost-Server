@@ -22,13 +22,13 @@ def test_member_cannot_admin(client):
 
 def test_settings_secrets_write_only(client):
     login(client, "admin")
-    r = client.put("/api/admin/settings/email", json={"enabled": True, "username": "me", "password": "s3cret", "from_email": "cabin@example.com"})
+    r = client.put("/api/admin/settings/email", json={"api_key": "xkeysib-s3cret", "from_email": "cabin@example.com"})
     assert r.status_code == 200
     body = r.json()
-    assert "password" not in body and body["password_set"] is True
+    assert "api_key" not in body and body["api_key_set"] is True and "s3cret" not in r.text
     # Sending None keeps the secret.
-    body = client.put("/api/admin/settings/email", json={"password": None}).json()
-    assert body["password_set"] is True
+    body = client.put("/api/admin/settings/email", json={"api_key": None}).json()
+    assert body["api_key_set"] is True
     all_settings = client.get("/api/admin/settings").json()
     assert "push" not in all_settings
     assert all_settings["google"]["redirect_uri"].endswith("/api/auth/google/callback")

@@ -25,13 +25,8 @@
 	}
 
 	const EMAIL: Field[] = [
-		{ key: 'enabled', label: 'Send email', type: 'checkbox' },
-		{ key: 'host', label: 'SMTP server', placeholder: 'smtp-relay.brevo.com' },
-		{ key: 'port', label: 'Port', type: 'number' },
-		{ key: 'username', label: 'SMTP login', help: 'Brevo: SMTP & API → SMTP tab → Login.' },
-		{ key: 'password', label: 'SMTP key', type: 'password', help: 'Brevo: SMTP & API → SMTP tab → Generate a new SMTP key.' },
-		{ key: 'from_email', label: 'From address', type: 'email', help: 'Must be a sender or domain verified with your email service.' },
-		{ key: 'from_name', label: 'From name' }
+		{ key: 'api_key', label: 'Brevo API key', type: 'password', help: 'In Brevo: SMTP & API → API keys → Generate. It starts with xkeysib- (an SMTP key won’t work).' },
+		{ key: 'from_email', label: 'Send from', type: 'email', placeholder: 'cabin@hawksroost.live', help: 'An address on a domain you’ve verified in Brevo. Emails show the app name as the sender.' }
 	];
 	const GOOGLE: Field[] = [
 		{ key: 'enabled', label: 'Allow “Continue with Google”', type: 'checkbox' },
@@ -45,8 +40,8 @@
 	{#if s}
 		<p class="muted intro">People always sign in with their email and a password. Email lets the app send invites, password resets and requests to join. Google sign-in is an optional extra.</p>
 		<div class="cols">
-			<SettingsForm section="email" title="Email" fields={EMAIL} bind:values={s.email}>
-				{#snippet intro()}<p class="small muted">Any SMTP service works. Without email, you send invite and reset links yourself, and requests to join only reach admins as notifications.</p>{/snippet}
+			<SettingsForm section="email" title="Email (Brevo)" fields={EMAIL} bind:values={s.email}>
+				{#snippet intro()}<p class="small muted">Email is on once both are filled in. Without it, you send invite and reset links yourself, and requests to join only reach admins as notifications.</p>{/snippet}
 				{#snippet actions()}
 					<input type="email" bind:value={testTo} class="test-to" aria-label="Send a test to" />
 					<button type="button" class="btn secondary" onclick={testEmail}>Send test</button>
