@@ -134,6 +134,7 @@
 		{#if session.can('edit')}<button class="btn" onclick={() => newBooking()}><Plus size={18} strokeWidth={1.75} />Book</button>{/if}
 	</div>
 
+	<div class="layout">
 	<div class="cal card" role="grid" aria-label={monthLabel}>
 		<div class="dow" role="row">
 			{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as d, i (i)}<span class="label" role="columnheader">{d}</span>{/each}
@@ -167,6 +168,7 @@
 		{/each}
 	</div>
 
+	<aside class="side">
 	<section class="card">
 		<div class="card-head">
 			<h2 class="h3">{selected ? parseDate(selected).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'This month'}</h2>
@@ -212,6 +214,8 @@
 			<p class="small muted">Keep this link private: anyone with it can see the bookings.</p>
 		{/if}
 	</section>
+	</aside>
+	</div>
 </div>
 
 <Sheet bind:open title={editing ? 'Edit booking' : 'Book the cabin'}>
@@ -236,6 +240,29 @@
 </Sheet>
 
 <style>
+	/* Calendar on the left, the month's bookings and calendar apps on the right when there's room. */
+	.layout {
+		display: grid;
+		gap: var(--space-4);
+		align-items: start;
+	}
+	.layout > * {
+		min-width: 0;
+	}
+	.side {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+	@media (min-width: 1150px) {
+		.layout {
+			grid-template-columns: minmax(0, 1fr) 320px;
+		}
+		.side .spread {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+	}
 	.h3 {
 		font: 600 17px/24px var(--font-display);
 	}

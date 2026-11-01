@@ -126,9 +126,9 @@ tap, live view auto-stops when idle, no prefetching. Video stays behind `/video/
   IBM Plex Mono for data (times, dates, quantities, frequencies). No other faces.
 - **Theme:** follow `prefers-color-scheme`, allow a manual toggle; **force dark on
   Cameras and Radio**.
-- **Shell:** one nav list (Today, Calendar, Lists, Cameras, Weather, Starlink,
-  Radio when on; then Settings, Admin). Phone <700px = pine top bar + bottom tabs
-  (first four + More sheet). Tablet 700–899px = 80px icon rail. Desktop ≥900px =
+- **Shell:** one nav list (Today, Calendar, Shopping, To-do, Cameras, Weather,
+  Starlink, Radio when on; then Settings, Admin). Phone <700px = pine top bar +
+  bottom tabs (first five + More sheet). Tablet 700–899px = 80px icon rail. Desktop ≥900px =
   240px sidebar with full lockup. Content max-width 1120px. Lay pages out for all
   three (e.g. video beside controls on wide screens); never write phone-only copy.
 - **Admin** is grouped by what you look after: `/admin` overview, then People

@@ -109,7 +109,7 @@
 			{/if}
 
 			<section class="card">
-				<div class="card-head"><h2>To-do <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists?tab=todo">All lists</a></div>
+				<div class="card-head"><h2>To-do <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists">All lists</a></div>
 				{#if data.tasks.length}
 					<ul class="list">
 						{#each data.tasks as t (t.id)}
@@ -124,7 +124,7 @@
 				{:else}
 					<p class="muted">Nothing to do. Go sit on the porch.</p>
 				{/if}
-				<a class="row shop" href="/lists?tab=shopping">
+				<a class="row shop" href="/shopping">
 					<span class="grow">Shopping list</span><span class="data">{data.shopping_count} {data.shopping_count === 1 ? 'item' : 'items'}</span><ChevronRight size={18} strokeWidth={1.75} />
 				</a>
 			</section>

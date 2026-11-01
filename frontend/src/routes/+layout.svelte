@@ -11,7 +11,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
-		Calendar, Cctv, CloudSun, Ellipsis, ListChecks, Radio, Satellite, Settings, Shield, Sun
+		Calendar, Cctv, CloudSun, Ellipsis, ListChecks, Radio, Satellite, Settings, Shield, ShoppingCart, Sun
 	} from '@lucide/svelte';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Lockup from '#lib/components/Lockup.svelte';
@@ -26,11 +26,12 @@
 	const PUBLIC = ['/login', '/invite/', '/reset/', '/request-access'];
 	const isPublic = $derived(PUBLIC.some((p) => page.url.pathname === p || page.url.pathname.startsWith(p)));
 
-	// Everything people use, in one order. Phones show the first four as tabs and the rest under More.
+	// Everything people use, in one order. Phones show the first five as tabs and the rest under More.
 	const nav = $derived([
 		{ href: '/', label: 'Today', icon: Sun },
 		{ href: '/calendar', label: 'Calendar', icon: Calendar },
-		{ href: '/lists', label: 'Lists', icon: ListChecks },
+		{ href: '/shopping', label: 'Shopping', icon: ShoppingCart },
+		{ href: '/lists', label: 'To-do', icon: ListChecks },
 		{ href: '/cameras', label: 'Cameras', icon: Cctv },
 		{ href: '/weather', label: 'Weather', icon: CloudSun },
 		{ href: '/starlink', label: 'Starlink', icon: Satellite },
@@ -40,11 +41,11 @@
 		{ href: '/settings', label: 'Settings', icon: Settings },
 		...(session.can('admin') ? [{ href: '/admin', label: 'Admin', icon: Shield }] : [])
 	]);
-	const tabs = $derived(nav.slice(0, 4));
-	const more = $derived([...nav.slice(4), ...tail]);
+	const tabs = $derived(nav.slice(0, 5));
+	const more = $derived([...nav.slice(5), ...tail]);
 
 	const TITLES: Record<string, string> = {
-		'/': 'Today', '/calendar': 'Calendar', '/lists': 'Lists', '/cameras': 'Cameras', '/radio': 'Radio',
+		'/': 'Today', '/calendar': 'Calendar', '/shopping': 'Shopping', '/lists': 'To-do', '/cameras': 'Cameras', '/radio': 'Radio',
 		'/weather': 'Weather', '/starlink': 'Starlink', '/settings': 'Settings', '/admin': 'Admin'
 	};
 	const section = $derived('/' + (page.url.pathname.split('/')[1] ?? ''));
@@ -184,7 +185,7 @@
 		inset: auto 0 0 0;
 		z-index: 20;
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 		height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
 		padding-bottom: env(safe-area-inset-bottom);
 		background: var(--surface);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Check, Pencil, Plus, RotateCcw, Trash2 } from '@lucide/svelte';
 	import { api } from '#lib/api.ts';
@@ -7,62 +8,13 @@
 	import { ago, dateRange } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
-	import type { Person, ShoppingItem, Task, TaskList } from '#lib/types.ts';
+	import type { Person, Task, TaskList } from '#lib/types.ts';
 
-	const tab = $derived(page.url.searchParams.get('tab') === 'todo' ? 'todo' : 'shopping');
+	// Old links (notifications, bookmarks) pointed at /lists?tab=shopping.
+	if (page.url.searchParams.get('tab') === 'shopping') goto('/shopping', { replaceState: true });
 	const canEdit = $derived(session.can('edit'));
 
-	// --- Shopping ---
-	let shop = $state<{ open: ShoppingItem[]; acquired: ShoppingItem[]; stores: string[] }>({ open: [], acquired: [], stores: [] });
-	let newItem = $state({ text: '', qty: '', store: '' });
-	let showGot = $state(false);
-
-	const groups = $derived.by(() => {
-		const m = new Map<string, ShoppingItem[]>();
-		for (const i of shop.open) {
-			const k = i.store || 'Anywhere';
-			m.set(k, [...(m.get(k) ?? []), i]);
-		}
-		return [...m.entries()].sort(([a], [b]) => (a === 'Anywhere' ? 1 : b === 'Anywhere' ? -1 : a.localeCompare(b)));
-	});
-
-	async function loadShop() {
-		try {
-			shop = await api.get('/api/lists/shopping');
-		} catch (e) {
-			toast.error(e);
-		}
-	}
-	async function addItem(e: SubmitEvent) {
-		e.preventDefault();
-		if (!newItem.text.trim()) return;
-		try {
-			const it = await api.post<ShoppingItem>('/api/lists/shopping', newItem);
-			toast.show(`Added ${it.text}${it.store ? ` to ${it.store}` : ''}.`);
-			newItem = { text: '', qty: '', store: newItem.store };
-			await loadShop();
-		} catch (err) {
-			toast.error(err);
-		}
-	}
-	async function setAcquired(i: ShoppingItem, acquired: boolean) {
-		try {
-			await api.patch(`/api/lists/shopping/${i.id}`, { acquired });
-			await loadShop();
-		} catch (e) {
-			toast.error(e);
-		}
-	}
-	async function removeItem(i: ShoppingItem) {
-		try {
-			await api.del(`/api/lists/shopping/${i.id}`);
-			await loadShop();
-		} catch (e) {
-			toast.error(e);
-		}
-	}
-
-	// --- To-do ---
+	// --- To-do and other lists ---
 	let lists = $state<TaskList[]>([]);
 	let people = $state<Person[]>([]);
 	let quick = $state<Record<number, string>>({});
@@ -85,7 +37,6 @@
 		const seen = new Map<number, Person>();
 		if (session.me) seen.set(session.me.id, session.me);
 		for (const l of lists) for (const t of l.tasks) for (const p of [t.assignee, t.created_by, t.done_by]) if (p) seen.set(p.id, p);
-		for (const i of [...shop.open, ...shop.acquired]) for (const p of [i.added_by, i.acquired_by]) if (p) seen.set(p.id, p);
 		people = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 	}
 	async function quickAdd(l: TaskList, e: SubmitEvent) {
@@ -166,73 +117,17 @@
 	}
 
 	$effect(() => {
-		loadShop();
 		loadTasks();
 	});
 	const PRIORITY = ['Low', 'Normal', 'High'];
 </script>
 
 <div class="stack">
-	<div class="pill-tabs" role="tablist">
-		<a href="?tab=shopping" class:on={tab === 'shopping'} role="tab" aria-selected={tab === 'shopping'}>Shopping</a>
-		<a href="?tab=todo" class:on={tab === 'todo'} role="tab" aria-selected={tab === 'todo'}>To-do</a>
+	<div class="spread wrap">
+		<h1>To-do</h1>
+		{#if canEdit}<button class="btn secondary" onclick={() => openList()}><Plus size={18} strokeWidth={1.75} />New list</button>{/if}
 	</div>
-
-	{#if tab === 'shopping'}
-		{#if canEdit}
-			<form class="card add" onsubmit={addItem}>
-				<label class="field grow"><span>Item</span><input bind:value={newItem.text} placeholder="e.g. Firewood, 1 cord" maxlength="200" /></label>
-				<label class="field qty"><span>Qty</span><input bind:value={newItem.qty} placeholder="2" maxlength="40" /></label>
-				<label class="field store"><span>Where</span><input bind:value={newItem.store} list="stores" placeholder="Flagstaff run" maxlength="60" /></label>
-				<datalist id="stores">{#each shop.stores as s (s)}<option value={s}></option>{/each}</datalist>
-				<button class="btn quick" aria-label="Add item"><Plus size={22} strokeWidth={1.75} /></button>
-			</form>
-		{/if}
-
-		{#if groups.length}
-			{#each groups as [store, items] (store)}
-				<section class="card">
-					<div class="card-head"><h2>{store}</h2><span class="label">{items.length} {items.length === 1 ? 'item' : 'items'}</span></div>
-					<ul class="list">
-						{#each items as i (i.id)}
-							<li>
-								{#if canEdit}
-									<button class="check" aria-label={`Got ${i.text}`} onclick={() => setAcquired(i, true)}></button>
-								{/if}
-								<div class="grow">
-									<div>{i.text}</div>
-									<div class="small muted">Added by {i.added_by?.name ?? 'someone'} · {ago(i.added_at)}</div>
-								</div>
-								{#if i.qty}<span class="data">{i.qty}</span>{/if}
-								{#if canEdit}<button class="btn icon" aria-label={`Remove ${i.text}`} onclick={() => removeItem(i)}><Trash2 size={18} strokeWidth={1.75} /></button>{/if}
-							</li>
-						{/each}
-					</ul>
-				</section>
-			{/each}
-		{:else}
-			<div class="card empty"><p>Nothing on the list.</p><p>The cupboards must be full.</p></div>
-		{/if}
-
-		{#if shop.acquired.length}
-			<button class="btn text" onclick={() => (showGot = !showGot)}>{showGot ? 'Hide' : 'Show'} what people got ({shop.acquired.length})</button>
-			{#if showGot}
-				<section class="card">
-					<ul class="list">
-						{#each shop.acquired as i (i.id)}
-							<li>
-								<div class="grow">
-									<div class="done">{i.text}{i.qty ? ` · ${i.qty}` : ''}</div>
-									<div class="small muted">Got by {i.acquired_by?.name ?? 'someone'} · {ago(i.acquired_at)} · added by {i.added_by?.name ?? 'someone'}</div>
-								</div>
-								{#if canEdit}<button class="btn icon" aria-label="Put back on list" onclick={() => setAcquired(i, false)}><RotateCcw size={18} strokeWidth={1.75} /></button>{/if}
-							</li>
-						{/each}
-					</ul>
-				</section>
-			{/if}
-		{/if}
-	{:else}
+	<div class="lists">
 		{#each lists as l (l.id)}
 			{@const open = l.tasks.filter((t) => !t.done_at)}
 			{@const done = l.tasks.filter((t) => t.done_at)}
@@ -277,8 +172,7 @@
 				{#if done.length}<button class="btn text" onclick={() => (showDone[l.id] = !showDone[l.id])}>{showDone[l.id] ? 'Hide' : 'Show'} done ({done.length})</button>{/if}
 			</section>
 		{/each}
-		{#if canEdit}<button class="btn secondary" onclick={() => openList()}><Plus size={18} strokeWidth={1.75} />New list</button>{/if}
-	{/if}
+	</div>
 </div>
 
 <Sheet bind:open={taskOpen} title="Task">
@@ -308,32 +202,19 @@
 	</form>
 </Sheet>
 
+
 <style>
-	.add {
-		display: flex;
-		gap: var(--space-2);
-		align-items: flex-end;
-		flex-wrap: wrap;
+	.lists {
+		display: grid;
+		gap: var(--space-4);
+		align-items: start;
 	}
-	.add .grow {
-		flex: 1 1 100%;
+	.lists > * {
+		min-width: 0;
 	}
-	.qty {
-		width: 72px;
-	}
-	.store {
-		flex: 1;
-	}
-	@media (min-width: 900px) {
-		.add {
-			flex-wrap: nowrap;
-		}
-		.add .grow {
-			flex: 1;
-		}
-		.store {
-			width: 200px;
-			flex: none;
+	@media (min-width: 1000px) {
+		.lists {
+			grid-template-columns: 1fr 1fr;
 		}
 	}
 	.check {
