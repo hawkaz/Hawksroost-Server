@@ -24,16 +24,19 @@
 	let playing = $state<Rec | null>(null);
 	let events = $state<{ id: number; type: string; at: string; snapshot: string | null }[]>([]);
 
-	async function load() {
+	async function load(quiet = false) {
 		try {
 			const all = await api.get<CameraInfo[]>('/api/cameras');
 			cam = all.find((c) => c.id === id) ?? null;
 		} catch (e) {
-			toast.error(e);
+			if (!quiet) toast.error(e);
 		}
 	}
 	$effect(() => {
 		load();
+		// Keep online state and presets current while the page is open.
+		const t = setInterval(() => !document.hidden && load(true), 60_000);
+		return () => clearInterval(t);
 	});
 
 	async function loadRecs() {
@@ -117,6 +120,15 @@
 	$effect(() => () => clearTimeout(sirenTimer));
 
 	const streamName = $derived(cam?.streams[lens] ?? cam?.streams.sub ?? '');
+	const zoomHint = $derived.by(() => {
+		const sharper = cam?.streams.tele
+			? ` For a sharper close-up, use the zoom lens${cam.streams.main ? ' or full quality' : ''}.`
+			: cam?.streams.main
+				? ' For a sharper close-up, use full quality.'
+				: '';
+		const cost = cam?.streams.main ? " Full quality uses more of the cabin's internet." : '';
+		return `Pinch, Ctrl + scroll or + to zoom the picture; drag to look around.${sharper}${cost}`;
+	});
 	const tabs = $derived([
 		{ id: 'live', label: 'Live' },
 		...(cam?.recordings ? [{ id: 'recordings', label: 'Recordings' }] : []),
@@ -226,9 +238,7 @@
 						{/if}
 						<a class="btn secondary" href={`/api/cameras/${id}/snapshot?full=1&download=1`} download><Camera size={18} strokeWidth={1.75} />Save picture</a>
 					</div>
-					{#if cam.streams.main}
-						<p class="small muted">Full quality uses more of the cabin's internet. Use it only when you need detail.</p>
-					{/if}
+					<p class="small muted">{zoomHint}</p>
 				</div>
 
 				<div class="controls">
@@ -251,8 +261,8 @@
 								</div>
 								{#if cam.zoom}
 									<div class="zoom">
-										<button class="btn secondary" aria-label="Zoom in" onpointerdown={() => ptz('ZoomInc')} onpointerup={release} onpointerleave={release}><ZoomIn size={20} strokeWidth={1.75} /></button>
-										<button class="btn secondary" aria-label="Zoom out" onpointerdown={() => ptz('ZoomDec')} onpointerup={release} onpointerleave={release}><ZoomOut size={20} strokeWidth={1.75} /></button>
+										<button class="btn secondary" aria-label="Camera zoom in" title="Camera zoom in" onpointerdown={() => ptz('ZoomInc')} onpointerup={release} onpointerleave={release}><ZoomIn size={20} strokeWidth={1.75} /></button>
+										<button class="btn secondary" aria-label="Camera zoom out" title="Camera zoom out" onpointerdown={() => ptz('ZoomDec')} onpointerup={release} onpointerleave={release}><ZoomOut size={20} strokeWidth={1.75} /></button>
 									</div>
 								{/if}
 							</div>

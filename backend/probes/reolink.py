@@ -22,9 +22,15 @@ async def probe(cam: Camera) -> dict:
         await h.get_host_data()
         await h.get_states()
         out.update(model=h.model, firmware=h.sw_version, nvr=h.is_nvr, channels=list(h.channels))
-        caps = ["ptz", "pan_tilt", "zoom", "ptz_presets", "ptz_speed", "auto_track", "autotrack_stream", "ai_people",
-                "siren", "siren_play", "floodLight", "replay"]
+        caps = ["ptz", "pan_tilt", "zoom", "zoom_basic", "ptz_presets", "ptz_preset_basic", "ptz_speed", "auto_track",
+                "autotrack_stream", "ai_people", "siren", "siren_play", "floodLight", "replay"]
         out["supports"] = {c: h.supported(ch, c) for c in caps}
+        # What the camera says about zooming (decides whether the app can offer camera-side zoom).
+        out["zoom_api"] = {k: h.api_version(k, ch) for k in ("ptzType", "supportDigitalZoom", "supportPtz3DLocation")}
+        try:
+            out["zoom_api"]["range"] = h.zoom_range(ch)
+        except Exception as e:
+            out["zoom_api"]["range"] = f"none ({type(e).__name__})"
         out["ai_types"] = h.ai_supported_types(ch)
         out["presets"] = h.ptz_presets(ch)
         out["auto_track_enabled"] = h.auto_track_enabled(ch) if h.supported(ch, "auto_track") else None
@@ -66,7 +72,7 @@ async def main() -> None:
     with SessionLocal() as db:
         cams = db.scalars(select(Camera).where(Camera.kind == "reolink").order_by(Camera.id)).all()
     if not cams:
-        print("No cameras saved yet. Add one in the app: Settings → Cameras.")
+        print("No Reolink cameras saved yet. Add one in the app: Admin → Cameras.")
         sys.exit(1)
     for cam in cams:
         print(json.dumps(await probe(cam), indent=2, default=str))

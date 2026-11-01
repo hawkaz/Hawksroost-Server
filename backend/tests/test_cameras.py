@@ -140,3 +140,39 @@ def test_unsupported_by_default():
             raise AssertionError("should not be supported")
 
     asyncio.run(run())
+
+
+class PresetCamera(FakeDriver):
+    """Presets someone edits in the camera's own app."""
+    on_camera = [{"id": "1", "name": "Driveway"}, {"id": "2", "name": "Lake"}]
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.known = list(self.on_camera)
+
+    def presets(self):
+        return self.known
+
+    async def refresh(self):
+        self.known = list(self.on_camera)
+
+
+def test_presets_follow_the_camera(client, monkeypatch):
+    login(client, "viewer")
+    with SessionLocal() as db:
+        cam = Camera(name="Deck", kind="stream", host="h", options={"main_url": "rtsp://h/main"})
+        db.add(cam)
+        db.commit()
+        cam_id = cam.id
+    driver = PresetCamera(cam_id, "h", None, "", "", 0, {})
+    cams.manager.conns[cam_id] = cams.Conn(cam_id=cam_id, driver=driver, online=True)
+    try:
+        names = lambda: [p["name"] for c in client.get("/api/cameras").json() if c["id"] == cam_id for p in c["presets"]]
+        assert names() == ["Driveway", "Lake"]
+        PresetCamera.on_camera = [{"id": "2", "name": "Lake"}]   # "Driveway" deleted in the camera's app
+        assert names() == ["Driveway", "Lake"]                    # within 15 s: not asked again yet
+        cams.manager.conns[cam_id].refreshed = 0                  # ...time passes
+        assert names() == ["Lake"]
+    finally:
+        cams.manager.conns.pop(cam_id, None)
+        PresetCamera.on_camera = [{"id": "1", "name": "Driveway"}, {"id": "2", "name": "Lake"}]

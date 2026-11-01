@@ -4,6 +4,7 @@ What a camera offers (pan/tilt, presets, recordings, siren, ...) comes from its
 driver's capabilities, so the UI never assumes a brand. CameraOffline (503) and
 NotSupported (400) are turned into responses in main.py.
 """
+import asyncio
 import time
 from datetime import date, datetime, timedelta
 from typing import Literal
@@ -48,8 +49,10 @@ def _cam_out(cam: Camera, db: Session) -> dict:
 
 
 @router.get("/api/cameras")
-def list_cameras(db: Session = Depends(get_db), _: User = Depends(viewer)):
+async def list_cameras(db: Session = Depends(get_db), _: User = Depends(viewer)):
     cams = db.scalars(select(Camera).where(Camera.enabled).order_by(Camera.sort, Camera.id)).all()
+    # Pick up presets added or removed in the camera's own app (throttled per camera).
+    await asyncio.gather(*(manager.refresh(c.id) for c in cams))
     return [_cam_out(c, db) for c in cams]
 
 

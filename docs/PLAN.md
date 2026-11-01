@@ -193,3 +193,9 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   go2rtc 1.9.15 (signed in → 101, signed out → 401, other site → 403). Player
   now shows "Connecting…" until a picture arrives and offers a retry if none
   does. Added `scripts/camera-check.sh`.
+- 2026-11-01 — Presets now follow the camera: re-read every 2 minutes and
+  whenever a camera page is opened (at most every 15 s). Picture zoom in the
+  player for every camera (pinch, Ctrl + scroll / trackpad pinch, + / −, drag,
+  double-tap), tested in a browser with a stand-in video. The camera reports no
+  camera-side zoom over its API (its "hybrid zoom" is the second lens plus
+  digital cropping); the probe now prints its zoom fields to confirm.

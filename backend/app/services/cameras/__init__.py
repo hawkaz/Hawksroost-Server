@@ -44,6 +44,7 @@ class Conn:
     active: set[str] = field(default_factory=set)        # detections currently on
     last_event: dict[str, float] = field(default_factory=dict)
     task: asyncio.Task | None = None
+    refreshed: float = 0.0                               # loop time of the last refresh()
 
 
 class CameraManager:
@@ -224,6 +225,21 @@ class CameraManager:
     # --- actions used by the API -------------------------------------------------------
     # Each raises CameraOffline when the camera isn't connected and NotSupported
     # when this kind of camera can't do it.
+
+    async def refresh(self, cam_id: int, max_age_s: float = 15) -> None:
+        """Re-read what people change in the camera's own app (presets), at most every max_age_s.
+        Never raises: a slow or failing camera just keeps what it had."""
+        conn = self.conns.get(cam_id)
+        if conn is None or not conn.online:
+            return
+        now = asyncio.get_running_loop().time()
+        if now - conn.refreshed < max_age_s:
+            return
+        conn.refreshed = now
+        try:
+            await asyncio.wait_for(conn.driver.refresh(), timeout=5)
+        except Exception as e:
+            log.info("camera %s: refresh failed (%s)", cam_id, e)
 
     def online(self, cam_id: int) -> bool:
         conn = self.conns.get(cam_id)

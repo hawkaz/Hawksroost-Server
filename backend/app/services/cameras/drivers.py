@@ -84,6 +84,9 @@ class Driver:
     def presets(self) -> list[dict]:
         return []
 
+    async def refresh(self) -> None:
+        """Re-read things people change in the camera's own app (e.g. presets)."""
+
     def auto_track(self) -> bool | None:
         return None
 
@@ -133,7 +136,8 @@ class ReolinkDriver(Driver):
         caps = {
             "ptz": h.supported(ch, "pan_tilt") or h.supported(ch, "ptz"),
             "zoom": h.supported(ch, "zoom"),
-            "presets": h.supported(ch, "ptz_presets"),
+            # Can have presets (even if none are saved yet); the list itself is re-read by refresh().
+            "presets": h.supported(ch, "ptz_preset_basic") or h.supported(ch, "ptz_presets"),
             "auto_track": h.supported(ch, "auto_track"),
             "recordings": True,   # reads the camera's SD card (or the NVR's disk)
             "events": True,
@@ -176,6 +180,7 @@ class ReolinkDriver(Driver):
                 await asyncio.sleep(120)
                 await h.baichuan.check_subscribe_events()
                 await h.get_states()
+                await self.refresh()
             else:
                 await asyncio.sleep(3)
                 await h.get_ai_state_all_ch()
@@ -187,6 +192,10 @@ class ReolinkDriver(Driver):
 
     def presets(self) -> list[dict]:
         return [{"id": str(i), "name": n} for n, i in self.h.ptz_presets(self.channel).items()]
+
+    async def refresh(self) -> None:
+        if self.h.supported(self.channel, "ptz_preset_basic") or self.h.supported(self.channel, "ptz_presets"):
+            await self.h.get_state(cmd="GetPtzPreset")
 
     def auto_track(self) -> bool | None:
         return self.h.auto_track_enabled(self.channel) if self.h.supported(self.channel, "auto_track") else None
@@ -307,7 +316,7 @@ class OnvifDriver(Driver):
                 except Exception:
                     pass
                 await self._load_presets()
-                caps["presets"] = bool(self._presets)
+                caps["presets"] = True
             except Exception as e:
                 log.info("camera %s: no PTZ (%s)", self.cam_id, e)
                 self.ptz_svc = None
@@ -368,6 +377,10 @@ class OnvifDriver(Driver):
 
     def presets(self) -> list[dict]:
         return self._presets
+
+    async def refresh(self) -> None:
+        if self.ptz_svc:
+            await self._load_presets()
 
     async def ptz(self, command: str, speed: int | None = None) -> None:
         if not self.ptz_svc:
