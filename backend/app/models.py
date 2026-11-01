@@ -1,7 +1,7 @@
 """Database tables. Times are naive UTC; dates (bookings) are local calendar dates."""
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -152,6 +152,14 @@ class CameraEvent(Base):
 
 # --- Household ---------------------------------------------------------------
 
+# Who's coming on a visit (people with accounts). Others go in Reservation.others.
+reservation_people = Table(
+    "reservation_people", Base.metadata,
+    Column("reservation_id", ForeignKey("reservations.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class Reservation(Base):
     __tablename__ = "reservations"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -161,9 +169,18 @@ class Reservation(Base):
     start_date: Mapped[date] = mapped_column(Date, index=True)
     end_date: Mapped[date] = mapped_column(Date)  # departure day for stays; same as start for logistics
     note: Mapped[str | None] = mapped_column(Text)
+    others: Mapped[str | None] = mapped_column(String(200))   # people coming who aren't on the app
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
-    user: Mapped[User] = relationship()
+    user: Mapped[User] = relationship()                       # who booked it (can edit it)
+    people: Mapped[list[User]] = relationship(secondary=reservation_people, order_by="User.name")
+
+    def who(self) -> str:
+        """First names of everyone coming, for titles and the calendar feed."""
+        names = [p.name for p in self.people] or [self.user.name]
+        if self.others:
+            names.append(self.others)
+        return ", ".join(names)
 
 
 class ShoppingItem(Base):

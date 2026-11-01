@@ -31,7 +31,8 @@ def _out(r: Reservation, conflicts: list[int]) -> dict:
     return {
         "id": r.id, "kind": r.kind, "title": r.title, "note": r.note,
         "start_date": r.start_date.isoformat(), "end_date": r.end_date.isoformat(),
-        "user": users.brief(r.user), "overlaps": conflicts,
+        "user": users.brief(r.user), "people": [users.brief(p) for p in r.people], "others": r.others,
+        "overlaps": conflicts,
         "created_at": iso(r.created_at), "updated_at": iso(r.updated_at),
     }
 
@@ -72,6 +73,8 @@ class BookingIn(BaseModel):
     start_date: date
     end_date: date | None = None
     note: str | None = Field(None, max_length=2000)
+    people_ids: list[int] = Field(default_factory=list, max_length=50)   # who's coming (on the app)
+    others: str | None = Field(None, max_length=200)                     # anyone else coming
 
     @model_validator(mode="after")
     def _dates(self):
@@ -96,15 +99,28 @@ async def _notify_new_booking(booking_id: int, author_id: int) -> None:
             if not push.is_muted(u)]
         when = f"{r.start_date:%b %-d} – {r.end_date:%b %-d}"
         try:
-            await push.send_to_users(db, ids, f"{r.user.name} booked the cabin", f"{r.title} · {when}",
+            await push.send_to_users(db, ids, f"{r.user.name} booked the cabin", f"{r.who()} · {r.title} · {when}",
                                      url=f"/calendar?date={r.start_date.isoformat()}", tag=f"booking-{r.id}")
         except Exception:
             log.exception("booking push failed")
 
 
+@router.get("/api/calendar/people")
+def people(db: Session = Depends(get_db), _: User = Depends(viewer)):
+    """Everyone on the app, for "Who's coming"."""
+    return [users.brief(u) for u in db.scalars(select(User).where(User.active).order_by(User.name))]
+
+
+def _set_people(db: Session, r: Reservation, body: BookingIn) -> None:
+    ids = set(body.people_ids)
+    r.people = list(db.scalars(select(User).where(User.id.in_(ids), User.active))) if ids else []
+    r.others = (body.others or "").strip() or None
+
+
 @router.post("/api/calendar", status_code=201)
 def create_booking(body: BookingIn, tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(member)):
-    r = Reservation(user_id=user.id, **body.model_dump())
+    r = Reservation(user_id=user.id, **body.model_dump(exclude={"people_ids", "others"}))
+    _set_people(db, r, body)
     db.add(r)
     db.commit()
     db.refresh(r)
@@ -124,8 +140,9 @@ def _own(db: Session, booking_id: int, user: User) -> Reservation:
 @router.put("/api/calendar/{booking_id}")
 def update_booking(booking_id: int, body: BookingIn, db: Session = Depends(get_db), user: User = Depends(member)):
     r = _own(db, booking_id, user)
-    for k, v in body.model_dump().items():
+    for k, v in body.model_dump(exclude={"people_ids", "others"}).items():
         setattr(r, k, v)
+    _set_people(db, r, body)
     db.commit()
     return _with_conflicts(db, [r])[0]
 
@@ -156,7 +173,7 @@ def ical(token: str, db: Session = Depends(get_db)):
     for r in db.scalars(select(Reservation).where(Reservation.end_date >= since)):
         ev = Event()
         ev.add("uid", f"booking-{r.id}@hawksroost")
-        ev.add("summary", f"{r.user.name}: {r.title}" if r.kind == "stay" else r.title)
+        ev.add("summary", f"{r.who()}: {r.title}" if r.kind == "stay" else r.title)
         ev.add("dtstart", r.start_date)
         ev.add("dtend", r.end_date if r.kind == "stay" else r.end_date + timedelta(days=1))
         ev.add("dtstamp", r.updated_at or datetime.utcnow())

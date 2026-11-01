@@ -184,3 +184,43 @@ def test_only_admins_delete_calls(client, recdir):
     login(client, "admin")
     assert client.delete(f"/api/radio/recordings/{rid}").status_code == 204
     assert not f.exists() and client.get("/api/radio/recordings").json() == []
+
+
+# --- Manual tuning: one frequency instead of scanning ---------------------------------------
+
+def test_manual_tuning_renders_one_frequency(client):
+    from app import settings_store, state
+    from app.db import SessionLocal
+    from app.services import radio_config
+    from .conftest import login
+    login(client, "admin")
+    assert client.post("/api/admin/radio/seed").status_code == 200
+    with SessionLocal() as db:
+        settings_store.update(db, "radio", {"enabled": True})
+    client.post("/api/auth/logout")
+    login(client, "viewer")
+    assert client.put("/api/radio/tune", json={"mode": "manual", "freq_mhz": 155.16}).status_code == 403
+    client.post("/api/auth/logout")
+    login(client, "member")
+    assert client.put("/api/radio/tune", json={"mode": "manual", "freq_mhz": 5000}).status_code == 422
+    r = client.put("/api/radio/tune", json={"mode": "manual", "freq_mhz": 155.16, "modulation": "nfm", "minutes": 30})
+    assert r.status_code == 200, r.text
+    assert r.json()["tune"]["freq_mhz"] == 155.16 and r.json()["tune"]["until"].endswith("Z")
+    conf = (_config.RADIO_DIR / "rtl_airband.conf").read_text()
+    assert "freq = 155.1600" in conf and "centerfreq = 155.2600" in conf and 'filename_template = "dev1"' in conf
+    assert 'mode = "scan"' not in conf
+    status = client.get("/api/radio/status").json()
+    assert status["tune"]["by"] == "Member" and status["live"][0]["mode"] == "manual"
+    # Time's up: back to scanning on its own.
+    with SessionLocal() as db:
+        t = state.get(db, "radio_tune")
+        state.put(db, "radio_tune", {**t, "until": "2000-01-01T00:00:00"})
+    _rf._expire_tuning()
+    conf = (_config.RADIO_DIR / "rtl_airband.conf").read_text()
+    assert 'mode = "scan"' in conf and client.get("/api/radio/status").json()["tune"] is None
+    # And by hand.
+    client.put("/api/radio/tune", json={"mode": "manual", "freq_mhz": 121.5, "modulation": "am", "minutes": 0})
+    assert client.get("/api/radio/status").json()["tune"]["until"] is None
+    client.put("/api/radio/tune", json={"mode": "scan"})
+    with SessionLocal() as db:
+        assert radio_config.tune_state(db) is None

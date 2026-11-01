@@ -13,6 +13,7 @@ from .. import settings_store, state
 from ..db import get_db
 from ..deps import viewer
 from ..models import WeatherEvent, WeatherObs
+from ..services import sky
 from ..timeutil import LOCAL_TZ, iso, utcnow
 
 log = logging.getLogger("hawk.weather")
@@ -48,7 +49,9 @@ async def _forecast(cfg: dict) -> dict | None:
             "high_c": d.get("air_temp_high"), "low_c": d.get("air_temp_low"),
             "precip_pct": d.get("precip_probability"),
         } for d in raw.get("forecast", {}).get("daily", [])[:7]]
-        data = {"days": days, "conditions": raw.get("current_conditions", {}).get("conditions")}
+        cur = raw.get("current_conditions", {})
+        data = {"days": days, "conditions": cur.get("conditions"), "icon": cur.get("icon"),
+                "latitude": raw.get("latitude"), "longitude": raw.get("longitude")}
     except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
         log.warning("Tempest forecast failed: %s", e)
         data = None
@@ -137,6 +140,7 @@ async def weather_now(db: Session = Depends(get_db)):
                           .where(WeatherEvent.kind == "strike", WeatherEvent.ts >= now_utc - timedelta(hours=3))).one()
     strikes24 = db.scalar(select(func.count()).select_from(WeatherEvent).where(
         WeatherEvent.kind == "strike", WeatherEvent.ts >= now_utc - timedelta(hours=24)))
+    forecast = await _forecast(cfg)
     return {
         "enabled": cfg["enabled"],
         "units": settings_store.get(db, "general")["units"],
@@ -157,7 +161,8 @@ async def weather_now(db: Session = Depends(get_db)):
         },
         "lightning": {"count_3h": strikes3[0], "nearest_km": strikes3[1], "last": iso(strikes3[2]),
                       "count_24h": strikes24},
-        "forecast": await _forecast(cfg),
+        "forecast": forecast,
+        "condition": sky.now(db, n, forecast, wind_ms=(wind or {}).get("speed")),
     }
 
 
@@ -250,3 +255,11 @@ def weather_history(period: str = Query("day", alias="range"), db: Session = Dep
         "wind_rose": {"classes_ms": WIND_CLASSES_MS, "sectors": rose, "calm": calm, "total": total_wind},
         "strikes": [{"t": iso(s.ts), "distance_km": s.distance_km} for s in strikes],
     }
+
+
+def cached_forecast(db: Session) -> dict | None:
+    """The forecast from the last fetch, without fetching (for the Today page)."""
+    cfg = settings_store.get(db, "tempest")
+    if _forecast_cache["key"] == (cfg["api_token"], cfg["station_id"]):
+        return _forecast_cache["data"]
+    return None

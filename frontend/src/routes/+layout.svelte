@@ -31,7 +31,7 @@
 		{ href: '/', label: 'Today', icon: Sun },
 		{ href: '/calendar', label: 'Calendar', icon: Calendar },
 		{ href: '/shopping', label: 'Shopping', icon: ShoppingCart },
-		{ href: '/lists', label: 'To-do', icon: ListChecks },
+		{ href: '/lists', label: 'Lists', icon: ListChecks },
 		{ href: '/cameras', label: 'Cameras', icon: Cctv },
 		{ href: '/weather', label: 'Weather', icon: CloudSun },
 		{ href: '/starlink', label: 'Starlink', icon: Satellite },
@@ -45,7 +45,7 @@
 	const more = $derived([...nav.slice(5), ...tail]);
 
 	const TITLES: Record<string, string> = {
-		'/': 'Today', '/calendar': 'Calendar', '/shopping': 'Shopping', '/lists': 'To-do', '/cameras': 'Cameras', '/radio': 'Radio',
+		'/': 'Today', '/calendar': 'Calendar', '/shopping': 'Shopping', '/lists': 'Lists', '/cameras': 'Cameras', '/radio': 'Radio',
 		'/weather': 'Weather', '/starlink': 'Starlink', '/settings': 'Settings', '/admin': 'Admin'
 	};
 	const section = $derived('/' + (page.url.pathname.split('/')[1] ?? ''));

@@ -124,7 +124,7 @@
 
 <div class="stack">
 	<div class="spread wrap">
-		<h1>To-do</h1>
+		<h1>Lists</h1>
 		{#if canEdit}<button class="btn secondary" onclick={() => openList()}><Plus size={18} strokeWidth={1.75} />New list</button>{/if}
 	</div>
 	<div class="lists">

@@ -131,6 +131,15 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   A busy channel is still split into calls of at most 15 minutes. Incidents
   count transmissions, not calls. Deleting calls is admin-only.
 
+- **Visits:** "Who's coming" starts with you ticked; the person who booked can
+  still edit it even if they aren't going. Old delivery/repair entries stay
+  on the calendar; new ones can't be made.
+- **Weather icon without a forecast token:** sunny ≥ 75% of clear-sky sunlight,
+  partly cloudy 40–75%, cloudy below; lightning within 20 km in 30 minutes
+  shows a storm; rain at ≤ 0.5 °C shows snow.
+- **Manual radio tuning** is a member control (like pan/tilt) and returns to
+  scanning after 1 hour unless set otherwise, so fire calls aren't missed.
+
 ## Still open
 
 | Question | Needed by |
@@ -225,3 +234,9 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   Playback URL with Range passed through (Download fallback when it answers
   FLV), tested against a fake camera; "Full quality" looks up the matching
   main-stream file. 57 tests pass.
+- 2026-11-01 — "To-do" page renamed Lists; Today has separate Shopping and
+  Lists cards. Calendar: no delivery/repair option; visits have several
+  people + "anyone else" (migration 0005 copies each booker in as coming).
+  Weather icons on Weather and Today (station first, Tempest forecast, then
+  sunlight vs clear sky). Radio: tune to one frequency (FM/AM, auto-return to
+  scanning) or scan. 62 tests pass.

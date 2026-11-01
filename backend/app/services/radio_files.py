@@ -25,7 +25,7 @@ from mutagen.mp3 import MP3
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import config, push, settings_store
+from .. import config, push, settings_store, state
 from ..db import SessionLocal
 from ..models import RadioChannel, RadioIncident, RadioRecording, User
 from ..timeutil import utcnow
@@ -272,6 +272,17 @@ def enforce_retention(db: Session) -> int:
     return removed
 
 
+def _expire_tuning() -> None:
+    """Manual tuning has a time limit so the scanner isn't left on one frequency by mistake."""
+    from . import radio_config
+    with SessionLocal() as db:
+        t = state.get(db, "radio_tune")
+        if t and radio_config.tune_state(db) is None:
+            state.put(db, "radio_tune", {})
+            radio_config.apply(db)
+            log.info("radio: manual tuning ended; back to scanning")
+
+
 def _process_once() -> list[int]:
     """File work (reading, joining with ffmpeg) runs off the event loop."""
     with SessionLocal() as db:
@@ -286,6 +297,7 @@ async def run() -> None:
             with SessionLocal() as db:
                 on = settings_store.get(db, "radio")["enabled"] and config.RECORDINGS_DIR.exists()
             if on:
+                _expire_tuning()
                 ids = await asyncio.to_thread(_process_once)
                 with SessionLocal() as db:
                     await detect_incidents(db, [r for r in (db.get(RadioRecording, i) for i in ids) if r])

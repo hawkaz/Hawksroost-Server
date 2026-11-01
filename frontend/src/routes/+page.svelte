@@ -3,11 +3,12 @@
 	import { api } from '#lib/api.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import CameraThumb from '#lib/components/CameraThumb.svelte';
+	import WeatherIcon from '#lib/components/WeatherIcon.svelte';
 	import { ago, dateRange, nights, temp, wind, compass, type Units } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import type { Person } from '#lib/types.ts';
 
-	interface Booking { id: number; kind: string; title: string; start_date: string; end_date: string; user: Person }
+	interface Booking { id: number; kind: string; title: string; start_date: string; end_date: string; user: Person; people: Person[]; who: string }
 	interface Today {
 		date: string;
 		at_cabin: Booking[];
@@ -15,8 +16,9 @@
 		tasks: { id: number; title: string; list: string; priority: number; assignee: Person | null; due_date: string | null }[];
 		task_count: number;
 		shopping_count: number;
+		shopping: { id: number; text: string; qty: string | null; store: string | null }[];
 		units: Units;
-		weather: Record<string, number | string | null> | null;
+		weather: (Record<string, number | string | null> & { condition?: { icon: string; label: string } | null }) | null;
 		starlink: { state: string | null; error: string | null; latency_ms: number | null; updated_at: string } | null;
 		cameras: { id: number; name: string }[];
 	}
@@ -43,6 +45,7 @@
 	const hour = new Date().getHours();
 	const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 	const w = $derived(data?.weather);
+	const wc = $derived(w?.condition);
 	const u = $derived(data?.units ?? 'imperial');
 	const sl = $derived(data?.starlink ?? null);
 	const starlinkFresh = $derived(!!sl && !sl.error && Date.now() - new Date(sl.updated_at).getTime() < 300000);
@@ -61,7 +64,7 @@
 				{#if data.at_cabin.length}
 					<ul class="list">
 						{#each data.at_cabin as b (b.id)}
-							<li><Avatar person={b.user} /><div class="grow"><div>{b.user.name} · {b.title}</div><div class="small muted data">{dateRange(b.start_date, b.end_date)}</div></div></li>
+							<li><Avatar person={b.people[0] ?? b.user} /><div class="grow"><div>{b.who} · {b.title}</div><div class="small muted data">{dateRange(b.start_date, b.end_date)}</div></div></li>
 						{/each}
 					</ul>
 				{:else}
@@ -72,9 +75,9 @@
 					<ul class="list">
 						{#each data.next as b (b.id)}
 							<li>
-								<Avatar person={b.user} />
+								<Avatar person={b.people[0] ?? b.user} />
 								<div class="grow">
-									<div>{b.kind === 'stay' ? `${b.user.name} · ${b.title}` : b.title}</div>
+									<div>{b.kind === 'stay' ? `${b.who} · ${b.title}` : b.title}</div>
 									<div class="small muted data">{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nights(b.start_date, b.end_date)} nights` : ''}</div>
 								</div>
 							</li>
@@ -87,8 +90,10 @@
 				<div class="card-head"><h2>Weather</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
 				{#if w}
 					<div class="row">
+						{#if wc}<WeatherIcon icon={wc.icon} label={wc.label} size={44} />{/if}
 						<span class="big">{temp(w.temp_c as number, u)}</span>
 						<div class="data small">
+							{#if wc?.label}<div class="cond-label">{wc.label}</div>{/if}
 							<div>Wind {wind(w.wind_avg as number, u)} {compass(w.wind_dir as number)}, gusts {wind(w.wind_gust as number, u)}</div>
 							<div>Humidity {Math.round(w.humidity as number)}%</div>
 							<div class="muted">Updated {ago(w.ts as string)}</div>
@@ -109,7 +114,24 @@
 			{/if}
 
 			<section class="card">
-				<div class="card-head"><h2>To-do <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists">All lists</a></div>
+				<div class="card-head"><h2>Shopping <span class="count data">{data.shopping_count} to get</span></h2><a class="btn text" href="/shopping">Open</a></div>
+				{#if data.shopping.length}
+					<ul class="list">
+						{#each data.shopping as i (i.id)}
+							<li>
+								<div class="grow"><div>{i.text}</div>{#if i.store}<div class="small muted">{i.store}</div>{/if}</div>
+								{#if i.qty}<span class="data">{i.qty}</span>{/if}
+							</li>
+						{/each}
+					</ul>
+					{#if data.shopping_count > data.shopping.length}<a class="small muted more-link" href="/shopping">and {data.shopping_count - data.shopping.length} more</a>{/if}
+				{:else}
+					<p class="muted">Nothing on the list.</p>
+				{/if}
+			</section>
+
+			<section class="card">
+				<div class="card-head"><h2>Lists <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists">Open</a></div>
 				{#if data.tasks.length}
 					<ul class="list">
 						{#each data.tasks as t (t.id)}
@@ -124,9 +146,6 @@
 				{:else}
 					<p class="muted">Nothing to do. Go sit on the porch.</p>
 				{/if}
-				<a class="row shop" href="/shopping">
-					<span class="grow">Shopping list</span><span class="data">{data.shopping_count} {data.shopping_count === 1 ? 'item' : 'items'}</span><ChevronRight size={18} strokeWidth={1.75} />
-				</a>
 			</section>
 
 			{#if sl}
@@ -216,11 +235,12 @@
 	.dot.bad {
 		background: var(--warn);
 	}
-	.shop {
-		margin-top: var(--space-3);
-		padding-top: var(--space-3);
-		border-top: 1px solid var(--line);
-		text-decoration: none;
+	.cond-label {
+		font: 500 15px/20px var(--font-ui);
+	}
+	.more-link {
+		display: inline-flex;
+		align-items: center;
 		min-height: var(--tap);
 	}
 </style>

@@ -5,7 +5,10 @@ Mode per dongle:
 - multichannel: every enabled channel fits inside the dongle's ~2 MHz window and
   is heard at the same time.
 - scan: channels are spread wider; the dongle hops between them.
+- manual: someone tuned the dongle to one frequency from the Radio page
+  (kv_state "radio_tune"); scanning stops until it goes back to scan.
 """
+from datetime import datetime
 import secrets
 from dataclasses import dataclass, field
 
@@ -13,8 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config, settings_store, state
+from ..timeutil import utcnow
 from ..models import RadioChannel, RadioDevice
 
+MIN_MHZ, MAX_MHZ = 24.0, 1766.0   # what an RTL-SDR tunes
+MANUAL_OFFSET_MHZ = 0.1           # tune just off the wanted frequency, away from the DC spike
 WINDOW_MHZ = 1.6          # usable span we allow for multichannel (2.4 Msps, with margin)
 DC_GUARD_MHZ = 0.03       # keep channels off the centre-frequency DC spike
 DEFAULT_SQUELCH = 9.0     # dB SNR
@@ -57,9 +63,29 @@ def plan_device(dev: RadioDevice, channels: list[RadioChannel]) -> DevicePlan:
     return plan
 
 
+def tune_state(db: Session) -> dict | None:
+    """Current manual tuning, or None when scanning. Expired tuning counts as scanning."""
+    t = state.get(db, "radio_tune")
+    if not t:
+        return None
+    if t.get("until") and datetime.fromisoformat(t["until"]) <= utcnow():
+        return None
+    return t
+
+
+def manual_plan(dev: RadioDevice, freq_mhz: float, modulation: str) -> DevicePlan:
+    ch = RadioChannel(id=0, device_id=dev.id, group="Manual", label=f"{freq_mhz:.4f} MHz", freq_mhz=freq_mhz,
+                      modulation=modulation, squelch_snr=None, ctcss=None, incident=False, enabled=True)
+    return DevicePlan(dev, "manual", [ch], centerfreq=round(freq_mhz + MANUAL_OFFSET_MHZ, 4))
+
+
 def build_plans(db: Session) -> list[DevicePlan]:
     plans = []
+    tune = tune_state(db)
     for dev in db.scalars(select(RadioDevice).where(RadioDevice.enabled).order_by(RadioDevice.id)):
+        if tune and tune.get("device_id") == dev.id:
+            plans.append(manual_plan(dev, float(tune["freq_mhz"]), tune.get("modulation", "nfm")))
+            continue
         chans = list(db.scalars(select(RadioChannel).where(
             RadioChannel.device_id == dev.id, RadioChannel.enabled)))
         plans.append(plan_device(dev, chans))
@@ -106,6 +132,19 @@ def render_airband(plans: list[DevicePlan], password: str) -> str:
         d = p.device
         head = ['type = "rtlsdr";', f'serial = {_q(d.serial)};' if d.serial else f"index = {d.index};",
                 f"gain = {d.gain:.1f};", f"correction = {d.correction};"]
+        if p.mode == "manual":
+            # Files named like scan mode (dev<id>…_<freq>.mp3), so a frequency that's also a saved
+            # channel is labelled with that channel's name.
+            c = p.channels[0]
+            outputs = [_file_output(f"dev{d.id}")]
+            if d.live_stream:
+                outputs.append(_icecast_output(mount_name(d), d.name, password, scan=False))
+            chan = ("{ freq = %.4f; label = %s; modulation = %s; bandwidth = %d; squelch_snr_threshold = %.1f; "
+                    "outputs: ( %s ); }" % (c.freq_mhz, _q(c.label), _q(c.modulation), NFM_BANDWIDTH,
+                                            DEFAULT_SQUELCH, ", ".join(outputs)))
+            devices.append("  {\n    " + "\n    ".join(head) + f"\n    centerfreq = {p.centerfreq:.4f};\n"
+                           "    channels: (\n      " + chan + "\n    );\n  }")
+            continue
         if p.mode == "scan":
             freqs = ", ".join(f"{c.freq_mhz:.4f}" for c in p.channels)
             labels = ", ".join(_q(c.label) for c in p.channels)

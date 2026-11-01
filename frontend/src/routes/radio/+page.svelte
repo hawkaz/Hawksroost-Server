@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { Download, Headphones, Pause, Play, Star, Trash2 } from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
-	import { ago, dayTime, duration } from '#lib/format.ts';
+	import { ago, dayTime, duration, time } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 
@@ -12,6 +12,8 @@
 		live: { device_id: number; name: string; mode: string; url: string }[];
 		last_recording_at: string | null;
 		incidents: { id: number; label: string; started_at: string; tx_count: number }[];
+		tune: { freq_mhz: number; modulation: 'nfm' | 'am'; by: string | null; until: string | null } | null;
+		scan_channels: number;
 	}
 	interface Channel { id: number; group: string; label: string; freq_mhz: number; incident: boolean }
 	interface Rec { id: number; channel_id: number | null; group: string | null; label: string; freq_mhz: number | null; started_at: string; duration_s: number; keep: boolean; parts: number; url: string }
@@ -90,6 +92,45 @@
 			toast.error(e);
 		}
 	}
+	// --- Tuning: scan the channel list, or sit on one frequency ---
+	const canTune = $derived(session.can('edit'));
+	let manualOpen = $state(false);
+	let tuneForm = $state({ freq: '', modulation: 'nfm' as 'nfm' | 'am', minutes: 60 });
+	let tuning = $state(false);
+	const tuned = $derived(!!status?.tune);
+	// Show the current frequency in the form when the page opens while tuned.
+	$effect(() => {
+		const t = status?.tune;
+		if (t && !tuneForm.freq) tuneForm = { freq: t.freq_mhz.toFixed(4), modulation: t.modulation, minutes: tuneForm.minutes };
+	});
+	function openManual() {
+		if (status?.tune) tuneForm = { freq: status.tune.freq_mhz.toFixed(4), modulation: status.tune.modulation, minutes: tuneForm.minutes };
+		manualOpen = true;
+	}
+	async function setTune(body: Record<string, unknown>, done: string) {
+		tuning = true;
+		try {
+			const r = await api.put<{ errors: string[] }>('/api/radio/tune', body);
+			if (r.errors.length) toast.error(new Error(r.errors.join(' ')));
+			else toast.show(done);
+			await loadStatus();
+		} catch (e) {
+			toast.error(e);
+		} finally {
+			tuning = false;
+		}
+	}
+	function tuneTo(e: SubmitEvent) {
+		e.preventDefault();
+		const f = Number(tuneForm.freq.replace(',', '.'));
+		if (!f) return toast.error(new Error('Enter a frequency in MHz, like 155.160.'));
+		setTune({ mode: 'manual', freq_mhz: f, modulation: tuneForm.modulation, minutes: Number(tuneForm.minutes) },
+			`Tuned to ${f.toFixed(4)} MHz. The recorder restarts in a few seconds.`);
+	}
+	function backToScan() {
+		manualOpen = false;
+		setTune({ mode: 'scan' }, 'Back to scanning.');
+	}
 	const activeIds = $derived(new Set(status?.active.map((a) => a.channel_id)));
 </script>
 
@@ -103,7 +144,7 @@
 				{#if status.active.length}
 					<span class="chip live pulse">Active</span>
 				{:else}
-					<span class="chip">Scanning</span>
+					<span class="chip">{tuned ? 'Tuned' : 'Scanning'}</span>
 				{/if}
 				<span class="small muted">Last call {ago(status.last_recording_at)}</span>
 			</div>
@@ -115,7 +156,7 @@
 				<p class="muted">Quiet right now.</p>
 			{/if}
 			{#each status.incidents as i (i.id)}
-				<p class="notice danger">{i.label} is busy: {i.tx_count} calls since {dayTime(i.started_at)}.</p>
+				<p class="notice danger">{i.label} is busy: {i.tx_count} transmissions since {dayTime(i.started_at)}.</p>
 			{/each}
 			{#if status.live.length}
 				<div class="row wrap">
@@ -126,6 +167,43 @@
 					{/each}
 				</div>
 				{#if liveUrl}<audio src={liveUrl} controls autoplay style="width:100%"></audio>{/if}
+			{/if}
+		</section>
+
+		<section class="card stack tuning">
+			<div class="spread wrap">
+				<h2 class="h3">Tuning</h2>
+				{#if canTune}
+					<div class="pill-tabs" role="group" aria-label="Tuning">
+						<button class:on={!tuned && !manualOpen} disabled={tuning} onclick={() => (tuned ? backToScan() : (manualOpen = false))}>Scan channels</button>
+						<button class:on={tuned || manualOpen} disabled={tuning} onclick={openManual}>One frequency</button>
+					</div>
+				{/if}
+			</div>
+			{#if status.tune}
+				<p>
+					Listening to <span class="data">{status.tune.freq_mhz.toFixed(4)} MHz</span> ({status.tune.modulation === 'am' ? 'AM' : 'FM'})
+					{status.tune.until ? `until ${time(status.tune.until)}` : 'until someone switches back'}.
+					<span class="muted">Scanning is paused{status.tune.by ? `; set by ${status.tune.by}` : ''}.</span>
+				</p>
+			{:else}
+				<p class="muted">Scanning {status.scan_channels} {status.scan_channels === 1 ? 'channel' : 'channels'} and recording any calls.</p>
+			{/if}
+			{#if canTune && (manualOpen || tuned)}
+				<form class="tune-form" onsubmit={tuneTo}>
+					<label class="field"><span>Frequency (MHz)</span><input class="data" inputmode="decimal" required bind:value={tuneForm.freq} placeholder="155.160" /></label>
+					<label class="field"><span>Type</span>
+						<select bind:value={tuneForm.modulation}><option value="nfm">FM (fire, police, forest)</option><option value="am">AM (aircraft)</option></select>
+					</label>
+					<label class="field"><span>Back to scanning</span>
+						<select bind:value={tuneForm.minutes}>
+							<option value={30}>after 30 minutes</option><option value={60}>after 1 hour</option>
+							<option value={240}>after 4 hours</option><option value={0}>when someone switches back</option>
+						</select>
+					</label>
+					<button class="btn" disabled={tuning}>{tuned ? 'Retune' : 'Tune'}</button>
+				</form>
+				<p class="small muted">Calls on this frequency are recorded like any other. Live listening plays it too.</p>
 			{/if}
 		</section>
 
@@ -177,6 +255,19 @@
 {/if}
 
 <style>
+	.h3 {
+		font: 600 17px/24px var(--font-display);
+	}
+	.tune-form {
+		display: grid;
+		gap: var(--space-3);
+		align-items: end;
+	}
+	@media (min-width: 700px) {
+		.tune-form {
+			grid-template-columns: 1fr 1.2fr 1.2fr auto;
+		}
+	}
 	.btn.sel {
 		border-color: var(--accent);
 		color: var(--accent);

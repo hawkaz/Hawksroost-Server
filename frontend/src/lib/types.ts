@@ -29,7 +29,9 @@ export interface Booking {
 	note: string | null;
 	start_date: string;
 	end_date: string;
-	user: Person;
+	user: Person; // who booked it
+	people: Person[]; // who's coming
+	others: string | null; // anyone else coming
 	overlaps: number[];
 }
 

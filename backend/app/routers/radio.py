@@ -3,8 +3,10 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import config, settings_store, state
@@ -12,7 +14,7 @@ from ..db import get_db
 from ..deps import admin, member, viewer
 from ..models import RadioChannel, RadioDevice, RadioIncident, RadioRecording, User
 from ..services import radio_config, radio_files
-from ..timeutil import LOCAL_TZ, iso
+from ..timeutil import LOCAL_TZ, iso, utcnow
 
 router = APIRouter(tags=["radio"])
 
@@ -81,7 +83,43 @@ def status(db: Session = Depends(get_db), _: User = Depends(viewer)):
         "last_recording_at": iso(last.started_at) if last else None,
         "incidents": [{"id": i.id, "label": i.label, "started_at": iso(i.started_at), "tx_count": i.tx_count}
                       for i in open_inc],
+        "tune": _tune_out(radio_config.tune_state(db)),
+        "scan_channels": db.scalar(select(func.count()).select_from(RadioChannel).where(RadioChannel.enabled)) or 0,
     }
+
+
+def _tune_out(t: dict | None) -> dict | None:
+    if not t:
+        return None
+    return {"freq_mhz": t["freq_mhz"], "modulation": t["modulation"], "by": t.get("by"),
+            "until": t["until"] + "Z" if t.get("until") else None}
+
+
+class TuneIn(BaseModel):
+    mode: Literal["scan", "manual"]
+    freq_mhz: float | None = Field(None, ge=radio_config.MIN_MHZ, le=radio_config.MAX_MHZ)
+    modulation: Literal["nfm", "am"] = "nfm"
+    minutes: int = Field(60, ge=0, le=24 * 60)   # back to scanning after this long; 0 = until changed
+
+
+@router.put("/api/radio/tune")
+def tune(body: TuneIn, db: Session = Depends(get_db), user: User = Depends(member)):
+    """Listen to one frequency, or go back to scanning the channel list. The recorder
+    restarts on the new settings within a few seconds."""
+    if body.mode == "manual":
+        if body.freq_mhz is None:
+            raise HTTPException(422, "Enter a frequency in MHz.")
+        dev = db.scalar(select(RadioDevice).where(RadioDevice.enabled).order_by(RadioDevice.id).limit(1))
+        if dev is None:
+            raise HTTPException(400, "There's no radio dongle set up yet.")
+        until = utcnow() + timedelta(minutes=body.minutes) if body.minutes else None
+        state.put(db, "radio_tune", {"device_id": dev.id, "freq_mhz": round(body.freq_mhz, 4),
+                                     "modulation": body.modulation, "by": user.name,
+                                     "until": until.isoformat(timespec="seconds") if until else None})
+    else:
+        state.put(db, "radio_tune", {})
+    summary = radio_config.apply(db)
+    return {"tune": _tune_out(radio_config.tune_state(db)), "errors": summary["errors"]}
 
 
 @router.get("/api/radio/channels")

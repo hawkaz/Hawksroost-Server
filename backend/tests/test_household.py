@@ -61,3 +61,23 @@ def test_today(client):
     r = client.get("/api/today")
     assert r.status_code == 200
     assert r.json()["task_count"] == 0
+
+
+def test_visit_with_several_people(client):
+    from .conftest import login, make_user
+    dana = make_user("member", "dana@example.com")
+    login(client, "member")
+    me = client.get("/api/auth/me").json()["id"]
+    people = client.get("/api/calendar/people").json()
+    assert {p["id"] for p in people} == {me, dana}
+    r = client.post("/api/calendar", json={"title": "Fourth of July", "start_date": "2099-07-02", "end_date": "2099-07-06",
+                                           "people_ids": [me, dana, 9999], "others": "the Smiths "})
+    assert r.status_code == 201, r.text
+    b = r.json()
+    assert sorted(p["id"] for p in b["people"]) == sorted([me, dana]) and b["others"] == "the Smiths"
+    # Editing replaces the list.
+    r = client.put(f"/api/calendar/{b['id']}", json={"title": "Fourth of July", "start_date": "2099-07-02",
+                                                     "end_date": "2099-07-06", "people_ids": [dana]})
+    assert [p["id"] for p in r.json()["people"]] == [dana] and r.json()["others"] is None
+    feed = client.get(client.get("/api/calendar/feed").json()["url"].split("testserver")[1]).text
+    assert "Member: Fourth of July" in feed   # who's coming, in calendar apps too

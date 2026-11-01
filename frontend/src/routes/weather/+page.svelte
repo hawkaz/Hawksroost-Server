@@ -3,6 +3,7 @@
 	import { api, qs } from '#lib/api.ts';
 	import TimeChart, { type TPoint } from '#lib/components/TimeChart.svelte';
 	import WindDial from '#lib/components/WindDial.svelte';
+	import WeatherIcon from '#lib/components/WeatherIcon.svelte';
 	import WindRose from '#lib/components/WindRose.svelte';
 	import {
 		ago, distance, pressure, rain, rainValue, temp, tempValue, time, wind, windValue, type Units
@@ -22,7 +23,8 @@
 		today: { high_c: Num; high_at: string | null; low_c: Num; low_at: string | null; gust_max_ms: Num; gust_at: string | null };
 		rain: { today_mm: number; yesterday_mm: number; last_24h_mm: number; last_7d_mm: number };
 		lightning: { count_3h: number; nearest_km: Num; last: string | null; count_24h: number };
-		forecast: { days: { date: string; conditions: string; high_c: number; low_c: number; precip_pct: number }[]; conditions: string } | null;
+		forecast: { days: { date: string; conditions: string; icon: string | null; high_c: number; low_c: number; precip_pct: number }[]; conditions: string } | null;
+		condition: { icon: string; label: string; source: 'station' | 'forecast' } | null;
 	}
 	interface Point {
 		t: string; temp_c: Num; temp_min_c: Num; temp_max_c: Num; humidity: Num; pressure_mb: Num;
@@ -130,9 +132,12 @@
 
 		<section class="card hero">
 			<div class="now">
-				<div class="temp">{temp(n.temp_c as number, u)}</div>
+				<div class="temp">
+					{#if w?.condition}<WeatherIcon icon={w.condition.icon} label={w.condition.label} size={56} />{/if}
+					<span>{temp(n.temp_c as number, u)}</span>
+				</div>
 				<div class="cond">
-					{#if w?.forecast?.conditions}<div class="h3">{w.forecast.conditions}</div>{/if}
+					{#if w?.condition?.label}<div class="h3">{w.condition.label}</div>{:else if w?.forecast?.conditions}<div class="h3">{w.forecast.conditions}</div>{/if}
 					<div>Feels like <span class="data">{temp(d.feels_like_c, u)}</span></div>
 					<div class="muted">Dew point <span class="data">{temp(d.dew_point_c, u)}</span> · humidity <span class="data">{Math.round(n.humidity as number)}%</span></div>
 				</div>
@@ -186,6 +191,7 @@
 				{#each w.forecast.days as f, i (f.date)}
 					<li>
 						<span class="fd">{dayName(f.date, i)}</span>
+						<WeatherIcon icon={f.icon} label={f.conditions} size={28} />
 						<span class="data">{temp(f.high_c, u)}<span class="muted"> / {temp(f.low_c, u)}</span></span>
 						<span class="small muted">{f.conditions}</span>
 						{#if f.precip_pct}<span class="small precip"><Umbrella size={13} strokeWidth={1.75} />{f.precip_pct}%</span>{/if}
@@ -302,6 +308,9 @@
 		align-items: center;
 	}
 	.temp {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
 		font: 400 76px/1 var(--font-data);
 		letter-spacing: -0.04em;
 		font-variant-numeric: tabular-nums;
