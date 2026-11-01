@@ -191,13 +191,6 @@ def delete_recording(rec_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.get("/api/radio/incidents")
-def incidents(limit: int = 30, db: Session = Depends(get_db), _: User = Depends(viewer)):
-    rows = db.scalars(select(RadioIncident).order_by(RadioIncident.started_at.desc()).limit(min(limit, 100))).all()
-    return [{"id": i.id, "channel_id": i.channel_id, "label": i.label, "started_at": iso(i.started_at),
-             "ended_at": iso(i.ended_at), "tx_count": i.tx_count} for i in rows]
-
-
 # --- Admin ------------------------------------------------------------------------------
 
 class DeviceIn(BaseModel):

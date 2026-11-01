@@ -76,6 +76,15 @@
 			toast.error(e);
 		}
 	}
+	async function signOutEverywhere(u: Me) {
+		if (!confirm(`Sign ${u.name} out on every phone, tablet and computer? They can sign in again with their password or Google.`)) return;
+		try {
+			await api.post(`/api/admin/users/${u.id}/sign-out`);
+			toast.show(`${u.name} is signed out everywhere.`);
+		} catch (e) {
+			toast.error(e);
+		}
+	}
 	async function remove(u: Me) {
 		if (!confirm(`Remove ${u.name}'s account? Their bookings go too. To keep history, turn the account off instead.`)) return;
 		try {
@@ -192,7 +201,11 @@
 		</label>
 		<label class="spread"><span>Account turned on</span><input type="checkbox" checked={u.active} onchange={(e) => update(u, { active: (e.target as HTMLInputElement).checked })} /></label>
 		<div class="small muted">Signs in with {[u.has_google && 'Google', u.has_password && 'password'].filter(Boolean).join(' and ') || 'nothing yet'}.</div>
-		<button class="btn secondary" onclick={() => resetLink(u)}>Make a password reset link</button>
+		<div class="row wrap">
+			<button class="btn secondary" onclick={() => resetLink(u)}>Make a password reset link</button>
+			<button class="btn secondary" onclick={() => signOutEverywhere(u)} disabled={u.id === session.me?.id}>Sign out on all devices</button>
+		</div>
+		<p class="small muted">Use “Sign out on all devices” if a phone is lost or shared by mistake.</p>
 		{#if link}<input readonly value={link} onfocus={(e) => (e.target as HTMLInputElement).select()} /><p class="small muted">Send this to {u.name}. It works once, for 2 days.</p>{/if}
 		<div class="spread">
 			<button class="btn text" style="color:var(--danger)" onclick={() => remove(u)} disabled={u.id === session.me?.id}>Remove account</button>

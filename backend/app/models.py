@@ -164,7 +164,7 @@ class Reservation(Base):
     __tablename__ = "reservations"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    kind: Mapped[str] = mapped_column(String(16), default="stay")  # stay | logistics
+    kind: Mapped[str] = mapped_column(String(16), default="stay")  # stay (old rows may be "logistics")
     title: Mapped[str] = mapped_column(String(120))
     start_date: Mapped[date] = mapped_column(Date, index=True)
     end_date: Mapped[date] = mapped_column(Date)  # departure day for stays; same as start for logistics
@@ -261,8 +261,6 @@ class StarlinkSample(Base):
     drop_rate: Mapped[float | None] = mapped_column(Float)
     down_bps: Mapped[float | None] = mapped_column(Float)
     up_bps: Mapped[float | None] = mapped_column(Float)
-    down_bytes: Mapped[float] = mapped_column(Float, default=0)   # unused (usage counters dropped)
-    up_bytes: Mapped[float] = mapped_column(Float, default=0)     # unused
     down_peak_bps: Mapped[float | None] = mapped_column(Float)
     up_peak_bps: Mapped[float | None] = mapped_column(Float)
     power_w: Mapped[float | None] = mapped_column(Float)

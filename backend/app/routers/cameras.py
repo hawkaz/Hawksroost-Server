@@ -23,7 +23,7 @@ from ..deps import admin, camera_control, optional_user, viewer
 from ..models import Camera, CameraEvent, User
 from ..security import can
 from ..services import clips
-from ..services.cameras import KINDS, PTZ_COMMANDS, RecordingUnavailable, manager, stream_names, test_connection
+from ..services.cameras import PTZ_COMMANDS, RecordingUnavailable, manager, stream_names, test_connection
 from ..timeutil import LOCAL_TZ, iso
 from ..web import sign, unsign
 
@@ -311,11 +311,6 @@ def _admin_out(c: Camera) -> dict:
             "enabled": c.enabled, "sort": c.sort, "cooldown_s": c.cooldown_s, "model": c.model,
             "firmware": c.firmware, "capabilities": c.capabilities, "last_ok_at": iso(c.last_ok_at),
             "last_error": c.last_error}
-
-
-@router.get("/api/admin/cameras/kinds", dependencies=[Depends(admin)])
-def camera_kinds():
-    return [{"id": k, "label": v} for k, v in KINDS.items()]
 
 
 @router.get("/api/admin/cameras", dependencies=[Depends(admin)])

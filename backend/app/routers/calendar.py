@@ -59,16 +59,9 @@ def list_bookings(start: date, end: date, db: Session = Depends(get_db), _: User
     return _with_conflicts(db, list(rows))
 
 
-@router.get("/api/calendar/upcoming")
-def upcoming(limit: int = 5, db: Session = Depends(get_db), _: User = Depends(viewer)):
-    today = date.today()
-    rows = db.scalars(select(Reservation).where(Reservation.end_date >= today)
-                      .order_by(Reservation.start_date).limit(limit)).all()
-    return _with_conflicts(db, list(rows))
-
-
 class BookingIn(BaseModel):
-    kind: Literal["stay", "logistics"] = "stay"
+    """A visit. (Delivery/repair entries were dropped; old ones still show.)"""
+    kind: Literal["stay"] = "stay"
     title: str = Field(min_length=1, max_length=120)
     start_date: date
     end_date: date | None = None
@@ -78,12 +71,10 @@ class BookingIn(BaseModel):
 
     @model_validator(mode="after")
     def _dates(self):
-        if self.kind == "logistics" or self.end_date is None:
-            self.end_date = self.end_date or self.start_date
-        if self.kind == "stay" and self.end_date <= self.start_date:
+        if self.end_date is None:
+            self.end_date = self.start_date + timedelta(days=1)
+        if self.end_date <= self.start_date:
             raise ValueError("Leaving day has to be after arriving day.")
-        if self.end_date < self.start_date:
-            raise ValueError("End date is before start date.")
         if (self.end_date - self.start_date).days > 120:
             raise ValueError("That's more than 120 days.")
         return self

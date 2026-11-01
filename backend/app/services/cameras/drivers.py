@@ -19,11 +19,6 @@ from ... import config
 
 log = logging.getLogger("hawk.cameras")
 
-KINDS = {
-    "reolink": "Reolink",
-    "onvif": "ONVIF (most IP cameras)",
-    "stream": "Video stream URL",
-}
 PTZ_COMMANDS = ("Left", "Right", "Up", "Down", "LeftUp", "LeftDown", "RightUp", "RightDown", "ZoomInc", "ZoomDec", "Stop")
 OnChange = Callable[[set[str]], None]
 

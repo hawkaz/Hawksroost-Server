@@ -105,3 +105,18 @@ def test_forgot_without_email_still_ok(client):
     make_user("member", "sam@example.com")
     assert client.post("/api/auth/forgot", json={"email": "sam@example.com"}).status_code == 202
     assert client.post("/api/auth/forgot", json={"email": "nobody@example.com"}).status_code == 202
+
+
+def test_admin_signs_someone_out_everywhere(client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from .conftest import login, make_user
+    sam = make_user("member", "sam@example.com")
+    with TestClient(app, base_url="https://testserver") as phone:
+        assert phone.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct horse"}).status_code == 200
+        assert phone.get("/api/auth/me").status_code == 200
+        login(client, "admin")
+        assert client.post(f"/api/admin/users/{sam}/sign-out").status_code == 204
+        assert phone.get("/api/auth/me").status_code == 401
+        assert client.get("/api/auth/me").status_code == 200   # the admin stays signed in

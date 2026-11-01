@@ -20,9 +20,9 @@ from ...db import SessionLocal
 from ...models import AlertPref, Camera, CameraEvent, User
 from ...timeutil import LOCAL_TZ, utcnow
 from .. import go2rtc
-from .drivers import KINDS, PTZ_COMMANDS, Driver, NotSupported, go2rtc_frame, make_driver
+from .drivers import PTZ_COMMANDS, Driver, NotSupported, go2rtc_frame, make_driver
 
-__all__ = ["KINDS", "PTZ_COMMANDS", "CameraOffline", "NotSupported", "RecordingUnavailable", "cleanup_old_events",
+__all__ = ["PTZ_COMMANDS", "CameraOffline", "NotSupported", "RecordingUnavailable", "cleanup_old_events",
            "manager", "stream_names", "test_connection"]
 
 log = logging.getLogger("hawk.cameras")

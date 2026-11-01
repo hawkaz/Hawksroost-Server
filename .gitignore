@@ -3,11 +3,8 @@
 *.local
 *.secret
 
-# Runtime data on the server (DB, snapshots, backups, recordings)
+# Runtime data on the server (DB, snapshots, backups, recordings, go2rtc/Caddy state)
 /data/
-/sdr/recordings/*
-!/sdr/recordings/.gitkeep
-/sdr/rdio-scanner/data/
 
 # Python
 __pycache__/
