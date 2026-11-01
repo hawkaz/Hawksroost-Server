@@ -139,7 +139,7 @@ Each has its own page under **Admin**:
   cd /opt/hawksroost && docker compose exec api python -m probes.reolink
   ```
 
-  Paste the output back to Claude. If live video won't play, set the camera's encoding to H.264 in the Reolink app.
+  Paste the output back to Claude. If live video won't play, run `bash /opt/hawksroost/scripts/camera-check.sh` (read-only; passwords are masked) and send Claude the output.
 - **Weather:** nothing to enter for live data. Enter the station's elevation in feet (about 7,100 at Mormon Lake [VERIFY the station's own]) to show sea-level pressure. Optional token + station ID for the forecast.
 - **Starlink:** the default `192.168.100.1:9200` normally works. Dish restart, stow and the night sleep schedule are on the same page. Check:
 
