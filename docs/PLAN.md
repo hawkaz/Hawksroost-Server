@@ -209,3 +209,7 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   the System page shows "Last send failed" until a send works. Recommended:
   keep blocking on and allow the cabin's IP (Brevo API keys can do more than
   send mail); revisit if Starlink's address changes often.
+- 2026-11-01 — Calendar: the month's bookings and Calendar apps sit to the
+  right of the calendar on wide screens (stacked below 1150px). Shopping is
+  its own page (`/shopping`); To-do and other lists stay at `/lists`
+  (old `?tab=shopping` links redirect). Phones show five tabs + More.
