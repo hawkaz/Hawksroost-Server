@@ -4,7 +4,7 @@
 	import Avatar from '#lib/components/Avatar.svelte';
 	import CameraThumb from '#lib/components/CameraThumb.svelte';
 	import WeatherIcon from '#lib/components/WeatherIcon.svelte';
-	import { ago, dateRange, nights, temp, wind, compass, type Units } from '#lib/format.ts';
+	import { ago, dateRange, nightsText, temp, wind, compass, type Units } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import type { Person } from '#lib/types.ts';
 
@@ -31,10 +31,11 @@
 	async function load() {
 		try {
 			data = await api.get<Today>('/api/today');
-			if (session.radioEnabled) radio = await api.get<RadioStatus>('/api/radio/status');
+			error = '';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not load.';
 		}
+		if (session.radioEnabled) radio = await api.get<RadioStatus>('/api/radio/status').catch(() => radio);
 	}
 	$effect(() => {
 		load();
@@ -78,7 +79,7 @@
 								<Avatar person={b.people[0] ?? b.user} />
 								<div class="grow">
 									<div>{b.kind === 'stay' ? `${b.who} · ${b.title}` : b.title}</div>
-									<div class="small muted data">{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nights(b.start_date, b.end_date)} nights` : ''}</div>
+									<div class="small muted data">{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nightsText(b.start_date, b.end_date)}` : ''}</div>
 								</div>
 							</li>
 						{/each}

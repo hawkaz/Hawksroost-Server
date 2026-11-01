@@ -2,7 +2,6 @@
 export const CABIN_TZ = 'America/Phoenix';
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: CABIN_TZ, hour: 'numeric', minute: '2-digit' });
-const dayFmt = new Intl.DateTimeFormat('en-US', { timeZone: CABIN_TZ, weekday: 'short', month: 'short', day: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
 	timeZone: CABIN_TZ,
 	month: 'short',
@@ -13,7 +12,6 @@ const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
 
 export const time = (iso: string | null | undefined) => (iso ? timeFmt.format(new Date(iso)).toLowerCase() : '—');
 export const dayTime = (iso: string | null | undefined) => (iso ? dateTimeFmt.format(new Date(iso)).replace(' AM', ' am').replace(' PM', ' pm') : '—');
-export const day = (iso: string) => dayFmt.format(new Date(iso));
 
 /** Today's date in cabin time, as YYYY-MM-DD. */
 export function cabinToday(): string {
@@ -49,6 +47,12 @@ export function nights(start: string, end: string): number {
 	return Math.round((parseDate(end).getTime() - parseDate(start).getTime()) / 86400000);
 }
 
+/** "1 night", "3 nights". */
+export function nightsText(start: string, end: string): string {
+	const n = nights(start, end);
+	return `${n} ${n === 1 ? 'night' : 'nights'}`;
+}
+
 export function ago(iso: string | null | undefined): string {
 	if (!iso) return 'never';
 	const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -82,13 +86,6 @@ export function compass(deg: number | null | undefined): string {
 	return ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'][
 		Math.round(deg / 22.5) % 16
 	];
-}
-
-export function bytes(n: number | null | undefined): string {
-	if (!n) return '0 MB';
-	if (n >= 1e12) return `${(n / 1e12).toFixed(2)} TB`;
-	if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
-	return `${Math.round(n / 1e6)} MB`;
 }
 
 export function duration(s: number): string {

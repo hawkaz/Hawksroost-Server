@@ -102,9 +102,13 @@
 	}
 	async function remove() {
 		if (!confirm(`Remove the ${f.name} camera from the app? Its motion history goes too. Recordings on the camera stay.`)) return;
-		await api.del(`/api/admin/cameras/${f.id}`);
-		open = false;
-		load();
+		try {
+			await api.del(`/api/admin/cameras/${f.id}`);
+			open = false;
+			load();
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 
 	const CAP_WORDS: Record<string, string> = {

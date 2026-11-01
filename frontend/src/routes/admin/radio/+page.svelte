@@ -55,9 +55,13 @@
 	}
 	async function deleteDevice() {
 		if (!confirm('Remove this dongle? Its channels stay but become unassigned.')) return;
-		await api.del(`/api/admin/radio/devices/${dform.id}`);
-		devOpen = false;
-		load();
+		try {
+			await api.del(`/api/admin/radio/devices/${dform.id}`);
+			devOpen = false;
+			load();
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 	function editChannel(c?: Channel) {
 		cform = c ? { ...c } : { id: 0, device_id: devices[0]?.id ?? null, group: channels[0]?.group ?? 'Fire/EMS', label: '', freq_mhz: 154, modulation: 'nfm', squelch_snr: null, ctcss: null, incident: false, enabled: true, sort: channels.length };
@@ -86,14 +90,22 @@
 	}
 	async function deleteChannel() {
 		if (!confirm(`Delete ${cform.label}?`)) return;
-		await api.del(`/api/admin/radio/channels/${cform.id}`);
-		chOpen = false;
-		load();
+		try {
+			await api.del(`/api/admin/radio/channels/${cform.id}`);
+			chOpen = false;
+			load();
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 	async function seed() {
-		const r = await api.post<{ added: number }>('/api/admin/radio/seed');
-		toast.show(`Added ${r.added} channels. The core set is on; press Apply when ready.`);
-		load();
+		try {
+			const r = await api.post<{ added: number }>('/api/admin/radio/seed');
+			toast.show(`Added ${r.added} channels. The core set is on; press Apply when ready.`);
+			load();
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 	async function apply() {
 		try {

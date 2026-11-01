@@ -107,9 +107,6 @@ h3 {
 	margin: 0;
 	text-wrap: balance;
 }
-.display {
-	font: 800 40px/44px var(--font-display);
-}
 h1,
 .h1 {
 	font-weight: 800;
@@ -357,10 +354,6 @@ input[type='checkbox'] {
 	text-transform: uppercase;
 	color: var(--text-muted);
 	white-space: nowrap;
-}
-.chip.ok {
-	color: var(--ok);
-	border-color: currentColor;
 }
 .chip.warn {
 	color: var(--warn);

@@ -48,7 +48,9 @@
 		now = Date.now();
 	}
 	async function loadHistory() {
-		h = await api.get<History>(`/api/weather/history${qs({ range })}`);
+		const want = range;
+		const r = await api.get<History>(`/api/weather/history${qs({ range: want })}`);
+		if (want === range) h = r; // a slow answer for a range you've left isn't drawn
 	}
 	$effect(() => {
 		loadNow().catch(() => {});
@@ -206,7 +208,7 @@
 			<h2>History</h2>
 			<div class="pill-tabs" role="group" aria-label="Period">
 				{#each RANGES as [id, label] (id)}
-					<button class:on={range === id} onclick={() => (range = id)}>{label}</button>
+					<button class:on={range === id} aria-pressed={range === id} onclick={() => (range = id)}>{label}</button>
 				{/each}
 			</div>
 		</div>

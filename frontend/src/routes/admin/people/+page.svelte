@@ -96,8 +96,12 @@
 		}
 	}
 	async function revoke(i: Invite) {
-		await api.del(`/api/admin/invites/${i.id}`);
-		load();
+		try {
+			await api.del(`/api/admin/invites/${i.id}`);
+			load();
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 	function openInvite(r?: AccessRequest) {
 		inv = { name: r?.name ?? '', email: r?.email ?? '', role: r ? 'viewer' : 'member', days: 7, send_email: true, request_id: r?.id ?? null };

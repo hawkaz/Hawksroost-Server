@@ -54,7 +54,11 @@
 	});
 	$effect(() => {
 		const h = hours;
-		api.get<Hist>(`/api/starlink/history${qs({ hours: h })}`).then((r) => (hist = r)).catch(() => {});
+		api.get<Hist>(`/api/starlink/history${qs({ hours: h })}`)
+			.then((r) => {
+				if (h === hours) hist = r; // a slow answer for a range you've left isn't drawn
+			})
+			.catch(() => {});
 	});
 
 	const st = $derived(dish?.status ?? null);
@@ -251,7 +255,7 @@
 			<h2>History</h2>
 			<div class="pill-tabs" role="group" aria-label="Period">
 				{#each RANGES as [h, label] (h)}
-					<button class:on={hours === h} onclick={() => (hours = h)}>{label}</button>
+					<button class:on={hours === h} aria-pressed={hours === h} onclick={() => (hours = h)}>{label}</button>
 				{/each}
 			</div>
 		</div>

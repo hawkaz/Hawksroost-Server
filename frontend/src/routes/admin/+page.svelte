@@ -5,7 +5,7 @@
 	import { ADMIN_SECTIONS } from '#lib/components/admin/sections.ts';
 	import { session } from '#lib/session.svelte.ts';
 
-	interface Item { name: string; ok: boolean; detail: string }
+	interface Item { name: string; ok: boolean | null; detail: string }
 	let items = $state<Item[]>([]);
 	let people = $state<number | null>(null);
 	let asking = $state(0);

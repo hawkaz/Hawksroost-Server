@@ -7,11 +7,21 @@ class Toasts {
 	sheets = $state(0);
 	#timer: ReturnType<typeof setTimeout> | undefined;
 
-	show(message: string, kind: 'info' | 'error' = 'info') {
+	/** A button on the message, like Undo. */
+	action = $state<{ label: string; run: () => void } | null>(null);
+
+	show(message: string, kind: 'info' | 'error' = 'info', action: { label: string; run: () => void } | null = null) {
 		this.message = message;
 		this.kind = kind;
+		this.action = action;
 		clearTimeout(this.#timer);
-		this.#timer = setTimeout(() => (this.message = null), kind === 'error' ? 6000 : 3000);
+		this.#timer = setTimeout(() => this.dismiss(), kind === 'error' || action ? 6000 : 3000);
+	}
+
+	dismiss() {
+		clearTimeout(this.#timer);
+		this.message = null;
+		this.action = null;
 	}
 
 	error(e: unknown) {

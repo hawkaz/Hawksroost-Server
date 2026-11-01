@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CircleAlert, CircleCheck } from '@lucide/svelte';
+	import { CircleAlert, CircleCheck, CircleDashed } from '@lucide/svelte';
 	import { api } from '#lib/api.ts';
 	import AdminNav from '#lib/components/admin/AdminNav.svelte';
 	import SettingsForm, { type Field } from '#lib/components/admin/SettingsForm.svelte';
@@ -7,7 +7,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 
-	interface Health { version: string; items: { name: string; ok: boolean; detail: string; last: string | null }[] }
+	// ok: true working, false needs a look, null optional and not set up.
+	interface Health { version: string; items: { name: string; ok: boolean | null; detail: string; last: string | null }[] }
 	let h = $state<Health | null>(null);
 	let s = $state<Record<string, Record<string, unknown>> | null>(null);
 
@@ -18,7 +19,7 @@
 		if (!session.can('admin')) return;
 		loadHealth();
 		api.get<typeof s>('/api/admin/settings').then((v) => (s = v)).catch(toast.error.bind(toast));
-		const t = setInterval(loadHealth, 30000);
+		const t = setInterval(() => !document.hidden && loadHealth(), 30000);
 		return () => clearInterval(t);
 	});
 
@@ -37,7 +38,7 @@
 		{ key: 'hour', label: 'Hour to run (0–23, cabin time)', type: 'number' },
 		{ key: 'keep_days', label: 'Days of backups to keep on the laptop', type: 'number' }
 	];
-	const problems = $derived(h?.items.filter((i) => !i.ok).length ?? 0);
+	const problems = $derived(h?.items.filter((i) => i.ok === false).length ?? 0);
 </script>
 
 <div class="stack">
@@ -52,7 +53,9 @@
 				<ul class="list">
 					{#each h.items as i, n (n)}
 						<li>
-							<span class:ok={i.ok} class:warn={!i.ok} class="icon">{#if i.ok}<CircleCheck size={20} strokeWidth={1.75} />{:else}<CircleAlert size={20} strokeWidth={1.75} />{/if}</span>
+							<span class:ok={i.ok === true} class:warn={i.ok === false} class="icon">
+								{#if i.ok}<CircleCheck size={20} strokeWidth={1.75} />{:else if i.ok === false}<CircleAlert size={20} strokeWidth={1.75} />{:else}<CircleDashed size={20} strokeWidth={1.75} />{/if}
+							</span>
 							<div class="grow"><div>{i.name}</div><div class="small muted">{i.detail}</div></div>
 							{#if i.last}<span class="small muted data">{ago(i.last)}</span>{/if}
 						</li>

@@ -5,6 +5,7 @@
 	} from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
 	import LivePlayer from '#lib/components/LivePlayer.svelte';
+	import { loadPlayer } from '#lib/video.ts';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import { ago, cabinToday, dayTime, duration } from '#lib/format.ts';
@@ -34,23 +35,32 @@
 		}
 	}
 	$effect(() => {
+		loadPlayer().catch(() => {}); // fetch the video player while the camera list loads
 		load();
 		// Keep online state and presets current while the page is open.
 		const t = setInterval(() => !document.hidden && load(true), 60_000);
 		return () => clearInterval(t);
 	});
 
+	let recAsk = 0; // answers for a day that's no longer picked are dropped
 	async function loadRecs() {
-		recBusy = true;
+		const mine = ++recAsk;
 		recs = null;
+		if (!day) return; // date box cleared
+		recBusy = true;
 		try {
-			recs = await api.get(`/api/cameras/${id}/recordings${qs({ day })}`);
+			const r = await api.get<NonNullable<typeof recs>>(`/api/cameras/${id}/recordings${qs({ day })}`);
+			if (mine === recAsk) recs = r;
 		} catch (e) {
-			toast.error(e);
+			if (mine === recAsk) toast.error(e);
 		} finally {
-			recBusy = false;
+			if (mine === recAsk) recBusy = false;
 		}
 	}
+	// Other days the camera has recordings, newest first: offered when the picked day has none.
+	const otherDays = $derived((recs?.days_with_recordings ?? []).filter((d) => d !== day).sort().reverse().slice(0, 6));
+	const dayLabel = (d: string) =>
+		new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 	$effect(() => {
 		if (tab === 'recordings') {
 			void day;
@@ -62,18 +72,26 @@
 	const fileUrl = (r: Rec, stream: 'sub' | 'main', download = false) =>
 		`/api/cameras/${id}/recordings/file${qs({ name: r.name, start_id: r.start_id, end_id: r.end_id, stream, download: download ? 1 : undefined })}`;
 
-	// Press and hold to move; release to stop.
+	// Press and hold to move; release to stop. Commands go one after another, so on a quick
+	// tap Stop can't reach the camera before the move does (it would then turn to its end stop).
 	let moving = false;
-	async function ptz(command: string) {
-		moving = command !== 'Stop';
-		try {
-			await api.post(`/api/cameras/${id}/ptz`, { command });
-		} catch (e) {
-			toast.error(e);
-		}
+	let queue: Promise<unknown> = Promise.resolve();
+	const send = (command: string) => api.post(`/api/cameras/${id}/ptz`, { command });
+	function ptz(command: string) {
+		moving = true;
+		queue = queue.then(() => send(command)).catch((e) => toast.error(e));
+	}
+	/** Keyboard: hold Enter or Space on an arrow, like holding the button. */
+	function holdKey(e: KeyboardEvent, command: string) {
+		if (e.key !== 'Enter' && e.key !== ' ') return;
+		e.preventDefault();
+		if (!e.repeat) ptz(command);
 	}
 	function release() {
-		if (moving) ptz('Stop');
+		if (!moving) return;
+		moving = false;
+		// Stop matters most: try twice.
+		queue = queue.then(() => send('Stop').catch(() => send('Stop'))).catch((e) => toast.error(e));
 	}
 	async function preset(pid: string) {
 		try {
@@ -233,7 +251,7 @@
 	{#if tabs.length > 1}
 		<div class="pill-tabs">
 			{#each tabs as t (t.id)}
-				<button class:on={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
+				<button class:on={tab === t.id} aria-pressed={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
 			{/each}
 		</div>
 	{/if}
@@ -253,7 +271,7 @@
 						{#if Object.keys(cam.streams).length > 1}
 							<div class="pill-tabs" role="group" aria-label="Picture">
 								{#each Object.keys(cam.streams) as k (k)}
-									<button class:on={lens === k} onclick={() => (lens = k as typeof lens)}>{LENS[k as keyof typeof LENS]}</button>
+									<button class:on={lens === k} aria-pressed={lens === k} onclick={() => (lens = k as typeof lens)}>{LENS[k as keyof typeof LENS]}</button>
 								{/each}
 							</div>
 						{/if}
@@ -276,6 +294,9 @@
 											onpointerup={release}
 											onpointerleave={release}
 											onpointercancel={release}
+											onkeydown={(e) => holdKey(e, cmd)}
+											onkeyup={(e) => (e.key === 'Enter' || e.key === ' ') && release()}
+											onblur={release}
 											oncontextmenu={(e) => e.preventDefault()}
 										><Icon size={22} strokeWidth={1.75} /></button>
 									{/each}
@@ -348,7 +369,9 @@
 				</div>
 			</section>
 		{/if}
-		{#if recBusy}
+		{#if !day}
+			<p class="muted">Pick a day to see its recordings.</p>
+		{:else if recBusy}
 			<p class="muted">Asking the camera for its recordings…</p>
 		{:else if recs}
 			{#if recs.files.length}
@@ -367,7 +390,17 @@
 					</ul>
 				</section>
 			{:else}
-				<div class="card empty"><p>No recordings that day.</p><p>The camera keeps as much as fits, then records over the oldest.</p></div>
+				<div class="card empty stack">
+					<p>No recordings that day.</p>
+					{#if otherDays.length}
+						<p>It has recordings from:</p>
+						<div class="row wrap days">
+							{#each otherDays as d (d)}<button class="btn secondary" onclick={() => (day = d)}>{dayLabel(d)}</button>{/each}
+						</div>
+					{:else}
+						<p>The camera keeps as much as fits, then records over the oldest.</p>
+					{/if}
+				</div>
 			{/if}
 			<p class="small muted">Recordings are long files. Use <strong>Clip</strong> to watch or save just the minutes you want; it's much faster over the cabin's internet than downloading a whole file.</p>
 		{/if}
@@ -407,8 +440,8 @@
 					</label>
 				</div>
 				<div class="pill-tabs">
-					<button type="button" class:on={clipForm.stream === 'sub'} onclick={() => (clipForm.stream = 'sub')}>Small</button>
-					<button type="button" class:on={clipForm.stream === 'main'} onclick={() => (clipForm.stream = 'main')}>Full quality</button>
+					<button type="button" class:on={clipForm.stream === 'sub'} aria-pressed={clipForm.stream === 'sub'} onclick={() => (clipForm.stream = 'sub')}>Small</button>
+					<button type="button" class:on={clipForm.stream === 'main'} aria-pressed={clipForm.stream === 'main'} onclick={() => (clipForm.stream = 'main')}>Full quality</button>
 				</div>
 				{#if job?.status === 'failed'}<p class="notice danger">{job.error}</p>{/if}
 				<button class="btn">Make clip</button>
@@ -541,5 +574,8 @@
 		display: block;
 		margin-bottom: var(--space-2);
 		background: #000;
+	}
+	.days {
+		justify-content: center;
 	}
 </style>

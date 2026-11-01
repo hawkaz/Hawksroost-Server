@@ -253,7 +253,7 @@ def _age_s(ts) -> float | None:
 async def health(db: Session = Depends(get_db)):
     items = []
 
-    def add(name, ok, detail, last=None):
+    def add(name, ok: bool | None, detail, last=None):
         items.append({"name": name, "ok": ok, "detail": detail, "last": iso(last)})
 
     usage = shutil.disk_usage(config.DATA_DIR)
@@ -305,9 +305,14 @@ async def health(db: Session = Depends(get_db)):
         add("Email", ok, "Set up" if ok else f"Last send failed: {last.value.get('detail')}",
             last.updated_at if last else None)
     else:
-        add("Email", False, "Not set up (optional)")
+        add("Email", None, "Not set up (optional)")   # None: neither working nor a problem
     g = settings_store.get(db, "google")
-    add("Google sign-in", bool(g["enabled"] and g["client_id"]), "Set up" if g["enabled"] else "Not set up (optional)")
+    if not g["enabled"]:
+        add("Google sign-in", None, "Not set up (optional)")
+    elif g["client_id"] and g["client_secret"]:
+        add("Google sign-in", True, "Set up")
+    else:
+        add("Google sign-in", False, "Turned on, but the client ID or secret is missing")
     return {"version": config.APP_VERSION, "items": items}
 
 

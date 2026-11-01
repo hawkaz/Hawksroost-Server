@@ -42,19 +42,8 @@ sw.addEventListener('fetch', (event) => {
 		event.respondWith(fetch(req).catch(async () => (await caches.match('/200.html')) ?? Response.error()));
 		return;
 	}
-	event.respondWith(
-		caches.match(req).then(
-			(hit) =>
-				hit ??
-				fetch(req).then((res) => {
-					if (res.ok && SHELL.includes(url.pathname)) {
-						const copy = res.clone();
-						caches.open(CACHE).then((c) => c.put(req, copy));
-					}
-					return res;
-				})
-		)
-	);
+	// App files were all stored at install; anything else (an old browser's .woff font) from the network.
+	event.respondWith(caches.match(req).then((hit) => hit ?? fetch(req)));
 });
 
 sw.addEventListener('push', (event) => {

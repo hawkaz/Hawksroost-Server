@@ -5,7 +5,9 @@
 	let failed = $state(false);
 	$effect(() => {
 		const timer = setInterval(() => {
-			if (!document.hidden) stamp = Date.now();
+			if (document.hidden) return;
+			stamp = Date.now();
+			failed = false; // try again: one missed picture (a blip, an update) isn't "offline" for good
 		}, every * 1000);
 		return () => clearInterval(timer);
 	});

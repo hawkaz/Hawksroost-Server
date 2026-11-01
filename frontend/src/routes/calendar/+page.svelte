@@ -4,7 +4,7 @@
 	import { api, qs } from '#lib/api.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
-	import { addDays, cabinToday, dateRange, isoDate, nights, parseDate } from '#lib/format.ts';
+	import { addDays, cabinToday, dateRange, isoDate, nightsText, parseDate } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 	import type { Booking, Person } from '#lib/types.ts';
@@ -52,10 +52,12 @@
 	const byId = $derived(new Map(bookings.map((b) => [b.id, b])));
 
 	async function load() {
+		const key = monthKey;
 		const first = weeks[0][0];
 		const last = weeks[weeks.length - 1][6];
 		try {
-			bookings = await api.get<Booking[]>(`/api/calendar${qs({ start: first, end: last })}`);
+			const rows = await api.get<Booking[]>(`/api/calendar${qs({ start: first, end: last })}`);
+			if (key === monthKey) bookings = rows; // not a month you've already moved past
 		} catch (e) {
 			toast.error(e);
 		}
@@ -135,6 +137,16 @@
 			toast.error(e);
 		}
 	}
+	async function removeOld(b: Booking) {
+		if (!confirm(`Delete "${b.title}"?`)) return;
+		try {
+			await api.del(`/api/calendar/${b.id}`);
+			await load();
+			toast.show('Deleted.');
+		} catch (e) {
+			toast.error(e);
+		}
+	}
 	async function showFeed() {
 		try {
 			feedUrl = (await api.get<{ url: string }>('/api/calendar/feed')).url;
@@ -202,14 +214,18 @@
 						<div class="grow">
 							<div>{b.kind === 'stay' ? `${who(b).join(', ')} · ${b.title}` : b.title}</div>
 							<div class="small muted data">
-								{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nights(b.start_date, b.end_date)} nights` : ' · logistics'}
+								{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nightsText(b.start_date, b.end_date)}` : ' · delivery or repair'}
 							</div>
 							{#if b.overlaps.length}
 								<div class="small warn row" style="gap:4px"><TriangleAlert size={14} strokeWidth={1.75} />Overlaps with {b.overlaps.map((id) => byId.get(id)?.user.name ?? 'another stay').join(', ')}</div>
 							{/if}
 							{#if b.note}<div class="small muted">{b.note}</div>{/if}
 						</div>
-						{#if canEdit(b)}<button class="btn text" onclick={() => edit(b)}>Edit</button>{/if}
+						{#if canEdit(b)}
+							<!-- Old delivery/repair entries (no longer made) can only be deleted. -->
+							{#if b.kind === 'stay'}<button class="btn text" onclick={() => edit(b)}>Edit</button>
+							{:else}<button class="btn text" onclick={() => removeOld(b)}>Delete</button>{/if}
+						{/if}
 					</li>
 				{/each}
 			</ul>

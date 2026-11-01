@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Live video through go2rtc (MSE, falling back to HLS, then still frames).
-	// Stops by itself after a few minutes so the cabin's Starlink upload isn't
-	// used by a forgotten tab.
+	// Stops by itself after a few minutes nobody touches the page, so the cabin's
+	// Starlink upload isn't used by a forgotten tab.
 	import { Minus, Play, Plus } from '@lucide/svelte';
 	import { loadPlayer } from '#lib/video.ts';
 
@@ -11,6 +11,7 @@
 	let playing = $state(true);
 	let failed = $state(false);
 	let live = $state(false); // picture actually arriving
+	let frozen = $state(false); // was arriving, stopped: the player is reconnecting
 	let stalled = $state(false); // nothing after a while
 	let attempt = $state(0);
 	const STALL_S = 20;
@@ -108,22 +109,40 @@
 		if (!playing || !host) return;
 		const el = host;
 		live = false;
+		frozen = false;
 		stalled = false;
 		scale = 1;
 		tx = ty = 0;
 		const started = Date.now();
+		let lastT = -1;
+		let moved = Date.now();
 		// Watch for the first picture; say so if none comes instead of showing a black box.
-		// (Checked often so "Live" shows as soon as the picture does.)
+		// Then watch that it keeps moving: a picture stuck for 5 s says "Reconnecting…",
+		// and after STALL_S offers to try again. (Checked often so "Live" shows promptly.)
 		const watch = setInterval(() => {
 			const v = el.querySelector('video');
-			if (v && (v.readyState >= 2 || v.poster)) {
+			if (!v) return;
+			if (v.poster) {
+				live = true; // still frames (mjpeg): no clock to watch
+				stalled = frozen = false;
+				return;
+			}
+			if (v.currentTime !== lastT || v.paused) {
+				lastT = v.currentTime;
+				moved = Date.now();
+			}
+			const still = Date.now() - moved;
+			if (v.readyState >= 2 && still < 5000) {
 				live = true;
-				stalled = false;
-			} else if (!live && Date.now() - started > STALL_S * 1000) {
+				frozen = stalled = false;
+			} else if (live) {
+				frozen = still >= 5000;
+				stalled = still > STALL_S * 1000;
+			} else if (Date.now() - started > STALL_S * 1000) {
 				stalled = true;
 			}
 		}, 300);
-		let player: HTMLElement & { src?: string; mode?: string; background?: boolean } | null = null;
+		let player: (HTMLElement & { src?: string; mode?: string; ondisconnect?: () => void }) | null = null;
 		let cancelled = false;
 		loadPlayer()
 			.then(() => {
@@ -139,11 +158,24 @@
 				failed = false;
 			})
 			.catch(() => (failed = true));
-		const stop = setTimeout(() => (playing = false), idleMinutes * 60_000);
+		// Pause after idleMinutes without a tap, click or key on the page.
+		let idle: ReturnType<typeof setTimeout>;
+		const awake = () => {
+			clearTimeout(idle);
+			idle = setTimeout(() => (playing = false), idleMinutes * 60_000);
+		};
+		awake();
+		window.addEventListener('pointerdown', awake, { passive: true });
+		window.addEventListener('keydown', awake);
 		return () => {
 			cancelled = true;
-			clearTimeout(stop);
+			clearTimeout(idle);
+			window.removeEventListener('pointerdown', awake);
+			window.removeEventListener('keydown', awake);
 			clearInterval(watch);
+			// Hang up now: left alone, the player keeps streaming for 5 s after it's removed,
+			// so switching to full quality would briefly send both over the cabin's upload.
+			player?.ondisconnect?.();
 			el.replaceChildren();
 		};
 	});
@@ -166,7 +198,10 @@
 			<div class="video" bind:this={host} style:transform={`translate(${tx}px, ${ty}px) scale(${scale})`}></div>
 		</div>
 		{#if failed}
-			<div class="over">Video isn't available right now.</div>
+			<button class="over" onclick={() => attempt++}>
+				<span>Video isn't available right now.</span>
+				<span class="small">Tap to try again.</span>
+			</button>
 		{:else if stalled}
 			<button class="over" onclick={() => attempt++}>
 				<span>The video isn't coming through.</span>
@@ -174,7 +209,7 @@
 			</button>
 		{/if}
 		<div class="badge">
-			{#if live}<span class="chip live">Live</span>{:else if !failed && !stalled}<span class="chip">Connecting…</span>{/if}
+			{#if live && frozen}<span class="chip">Reconnecting…</span>{:else if live}<span class="chip live">Live</span>{:else if !failed && !stalled}<span class="chip">Connecting…</span>{/if}
 		</div>
 		{#if live}
 			<div class="zoom" role="group" aria-label="Zoom the picture">

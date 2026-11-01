@@ -11,7 +11,13 @@
 {#if active}
 	<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{toast.message ?? ''}</div>
 	{#if toast.message}
-		<div class="toast" class:error={toast.kind === 'error'} class:in-sheet={inSheet} aria-hidden="true">{toast.message}</div>
+		{@const action = toast.action}
+		<div class="toast" class:error={toast.kind === 'error'} class:in-sheet={inSheet} class:has-action={!!action} aria-hidden={action ? undefined : 'true'}>
+			<span>{toast.message}</span>
+			{#if action}
+				<button class="act" onclick={() => (toast.dismiss(), action.run())}>{action.label}</button>
+			{/if}
+		</div>
 	{/if}
 {/if}
 
@@ -35,6 +41,23 @@
 	.toast.error {
 		background: var(--danger);
 		color: #fff;
+	}
+	.toast.has-action {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding-right: var(--space-2);
+		pointer-events: auto;
+	}
+	.act {
+		min-height: var(--tap);
+		padding: 0 var(--space-3);
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--gold);
+		font: 600 15px/20px var(--font-ui);
+		cursor: pointer;
 	}
 	/* Phones: a sheet fills the bottom of the screen, so its messages show at the top. */
 	.toast.in-sheet {

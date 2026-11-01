@@ -52,6 +52,16 @@
 		try {
 			await api.del(`/api/lists/shopping/${i.id}`);
 			await loadShop();
+			toast.show(`Removed ${i.text}.`, 'info', { label: 'Undo', run: () => restore(i) });
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+	async function restore(i: ShoppingItem) {
+		try {
+			await api.post('/api/lists/shopping', { text: i.text, qty: i.qty, store: i.store });
+			await loadShop();
+			toast.show(`${i.text} is back on the list.`);
 		} catch (e) {
 			toast.error(e);
 		}

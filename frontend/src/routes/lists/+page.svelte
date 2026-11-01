@@ -85,9 +85,13 @@
 	}
 	async function deleteTask() {
 		if (!editingTask || !confirm('Delete this task?')) return;
-		await api.del(`/api/lists/tasks/items/${editingTask.id}`);
-		taskOpen = false;
-		await loadTasks();
+		try {
+			await api.del(`/api/lists/tasks/items/${editingTask.id}`);
+			taskOpen = false;
+			await loadTasks();
+		} catch (err) {
+			toast.error(err);
+		}
 	}
 	function openList(l?: TaskList) {
 		listForm = { id: l?.id ?? 0, name: l?.name ?? '' };
@@ -106,14 +110,22 @@
 	}
 	async function deleteList() {
 		if (!listForm.id || !confirm('Delete this whole list and its tasks?')) return;
-		await api.del(`/api/lists/tasks/${listForm.id}`);
-		listOpen = false;
-		await loadTasks();
+		try {
+			await api.del(`/api/lists/tasks/${listForm.id}`);
+			listOpen = false;
+			await loadTasks();
+		} catch (err) {
+			toast.error(err);
+		}
 	}
 	async function resetList(l: TaskList) {
 		if (!confirm(`Untick everything on "${l.name}"?`)) return;
-		await api.post(`/api/lists/tasks/${l.id}/reset`);
-		await loadTasks();
+		try {
+			await api.post(`/api/lists/tasks/${l.id}/reset`);
+			await loadTasks();
+		} catch (err) {
+			toast.error(err);
+		}
 	}
 
 	$effect(() => {

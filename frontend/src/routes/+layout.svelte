@@ -275,9 +275,11 @@
 		}
 		.shell {
 			display: grid;
-			grid-template-columns: 80px 1fr;
+			grid-template-columns: calc(80px + env(safe-area-inset-left)) 1fr;
 			min-height: 100vh;
 		}
+		/* Safe areas: a phone on its side keeps the rail clear of the notch; an installed
+		   iPad app keeps the logo below the status bar. */
 		.sidebar {
 			display: flex;
 			flex-direction: column;
@@ -285,7 +287,8 @@
 			position: sticky;
 			top: 0;
 			height: 100vh;
-			padding: var(--space-4) var(--space-2) var(--space-4);
+			padding: calc(var(--space-4) + env(safe-area-inset-top)) var(--space-2) calc(var(--space-4) + env(safe-area-inset-bottom))
+				calc(var(--space-2) + env(safe-area-inset-left));
 			background: var(--header);
 			color: var(--cream);
 			overflow-y: auto;
@@ -330,17 +333,18 @@
 			display: none;
 		}
 		main {
-			padding: var(--space-5) var(--space-5) var(--space-7);
+			padding: calc(var(--space-5) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) var(--space-7) var(--space-5);
 		}
 	}
 
 	/* ---------- Desktop (≥ 900px): full sidebar ---------- */
 	@media (min-width: 900px) {
 		.shell {
-			grid-template-columns: 240px 1fr;
+			grid-template-columns: calc(240px + env(safe-area-inset-left)) 1fr;
 		}
 		.sidebar {
-			padding: var(--space-5) var(--space-4);
+			padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom))
+				calc(var(--space-4) + env(safe-area-inset-left));
 		}
 		.brand {
 			justify-content: flex-start;
@@ -367,7 +371,7 @@
 			display: inline;
 		}
 		main {
-			padding: var(--space-6) var(--space-6) var(--space-7);
+			padding: calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-6) + env(safe-area-inset-right)) var(--space-7) var(--space-6);
 		}
 	}
 </style>

@@ -48,11 +48,20 @@ def _cam_out(cam: Camera, db: Session) -> dict:
     }
 
 
+_refreshing: set[asyncio.Task] = set()
+
+
 @router.get("/api/cameras")
 async def list_cameras(db: Session = Depends(get_db), _: User = Depends(viewer)):
     cams = db.scalars(select(Camera).where(Camera.enabled).order_by(Camera.sort, Camera.id)).all()
-    # Pick up presets added or removed in the camera's own app (throttled per camera).
-    await asyncio.gather(*(manager.refresh(c.id) for c in cams))
+    # Pick up presets added or removed in the camera's own app (throttled per camera). Wait
+    # a moment for them, not for a slow camera: live view waits on this list.
+    tasks = {asyncio.create_task(manager.refresh(c.id)) for c in cams}
+    if tasks:
+        _, slow = await asyncio.wait(tasks, timeout=1.0)
+        for t in slow:   # finishes in the background; the next look shows it
+            _refreshing.add(t)
+            t.add_done_callback(_refreshing.discard)
     return [_cam_out(c, db) for c in cams]
 
 

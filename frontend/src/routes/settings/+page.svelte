@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { BellOff, Shield } from '@lucide/svelte';
@@ -38,7 +39,16 @@
 		canPush = pushSupported();
 		syncPush().then((on) => (pushOn = on)).catch(() => {});
 		loadDevices();
-		api.get<typeof alerts>('/api/me/alerts').then((a) => (alerts = a)).catch(() => {});
+		api.get<typeof alerts>('/api/me/alerts')
+			.then(async (a) => {
+				alerts = a;
+				// Linked from a camera's Alerts button: the section only exists now, so scroll to it.
+				if (location.hash === '#alerts') {
+					await tick();
+					document.getElementById('alerts')?.scrollIntoView({ block: 'start' });
+				}
+			})
+			.catch(() => {});
 	});
 	async function loadDevices() {
 		devices = await api.get<typeof devices>('/api/me/push').catch(() => []);
@@ -164,7 +174,7 @@
 			<div class="small muted" style="margin-bottom:8px">Look</div>
 			<div class="pill-tabs">
 				{#each [['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']] as [v, l] (v)}
-					<button class:on={theme.pref === v} onclick={() => theme.set(v as ThemePref)}>{l}</button>
+					<button class:on={theme.pref === v} aria-pressed={theme.pref === v} onclick={() => theme.set(v as ThemePref)}>{l}</button>
 				{/each}
 			</div>
 		</div>
@@ -299,7 +309,7 @@
 		min-height: var(--tap);
 	}
 	.chipbtn {
-		min-height: 36px;
+		min-height: var(--tap);
 	}
 	.btn.sel {
 		background: var(--primary);
