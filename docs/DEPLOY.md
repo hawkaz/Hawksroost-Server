@@ -204,18 +204,14 @@ cd /opt/hawksroost && docker compose start api collector
 
 ## Radio (last)
 
-1. In the app, **Admin → Radio**: turn the scanner on, **Load Mormon Lake list** (12 core channels start on), **Apply**.
-2. Remove OpenWebRX so the recorder can use the dongle (deletes the container, not your other files):
+1. In the app, **Admin → Radio**: tick **Radio scanner on** → **Save**, **Load Mormon Lake list** (adds "Dongle 1" and the channels; 12 core ones start on), then **Apply to recorder**.
+2. Start the recorder. It checks the dongle first (USB, TV-tuner driver, nothing else holding it), turns on the `radio` profile and starts the recorder and live-listening server. No sudo:
 
    ```bash
-   docker stop owrx && docker rm owrx
+   bash /opt/hawksroost/scripts/radio-on.sh
    ```
 
-3. Start the recorder (runs the radio preflight first):
-
-   ```bash
-   cd /opt/hawksroost && bash scripts/radio-on.sh
-   ```
+   OpenWebRX, which used to hold the dongle, was already removed by `server-prep.sh`.
 
 Hardware notes: [RADIO.md](RADIO.md).
 

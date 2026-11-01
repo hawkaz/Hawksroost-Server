@@ -2,7 +2,7 @@
 # Runs RTLSDR-Airband and restarts it whenever the app rewrites its config.
 CONF=/config/rtl_airband.conf
 while [ ! -s "$CONF" ]; do
-  echo "Waiting for $CONF — set up the radio in the app (Settings → Radio → Apply)."
+  echo "Waiting for $CONF — set up the radio in the app (Admin → Radio → Apply)."
   sleep 15
 done
 while true; do
