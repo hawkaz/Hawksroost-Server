@@ -155,6 +155,7 @@
 	$effect(() => () => clearTimeout(sirenTimer));
 
 	const streamName = $derived(cam?.streams[lens] ?? cam?.streams.sub ?? '');
+	const touch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 	const zoomHint = $derived.by(() => {
 		const sharper = cam?.streams.tele
 			? ` For a sharper close-up, use the zoom lens${cam.streams.main ? ' or full quality' : ''}.`
@@ -162,7 +163,8 @@
 				? ' For a sharper close-up, use full quality.'
 				: '';
 		const cost = cam?.streams.main ? " Full quality uses more of the cabin's internet." : '';
-		return `Pinch, Ctrl + scroll or + to zoom the picture; drag to look around.${sharper}${cost}`;
+		const how = touch ? 'Pinch or tap + to zoom the picture' : 'Ctrl + scroll or + zooms the picture';
+		return `${how}; drag to look around.${sharper}${cost}`;
 	});
 	const tabs = $derived([
 		{ id: 'live', label: 'Live' },

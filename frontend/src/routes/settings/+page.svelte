@@ -6,6 +6,7 @@
 	import { api } from '#lib/api.ts';
 	import { dayTime } from '#lib/format.ts';
 	import { disablePush, enablePush, isIOS, isStandalone, platform, pushSupported, syncPush, type Platform } from '#lib/push.ts';
+	import Switch from '#lib/components/Switch.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { theme, type ThemePref } from '#lib/theme.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
@@ -206,9 +207,9 @@
 		{#if devices.length}
 			<div class="small muted">Your devices: {devices.map((d) => d.device_label ?? 'Device').join(', ')} · <button class="btn text" onclick={testPush}>Send a test</button></div>
 		{/if}
-		<label class="spread"><span>When someone books the cabin</span><input type="checkbox" checked={session.me?.notify_bookings} onchange={(e) => saveProfile({ notify_bookings: (e.target as HTMLInputElement).checked })} /></label>
+		<div class="spread"><span>When someone books the cabin</span><Switch checked={!!session.me?.notify_bookings} label="When someone books the cabin" onchange={(on) => saveProfile({ notify_bookings: on })} /></div>
 		{#if session.radioEnabled}
-			<label class="spread"><span>When the radio gets busy (fire, incidents)</span><input type="checkbox" checked={session.me?.notify_radio} onchange={(e) => saveProfile({ notify_radio: (e.target as HTMLInputElement).checked })} /></label>
+			<div class="spread"><span>When the radio gets busy (fire, incidents)</span><Switch checked={!!session.me?.notify_radio} label="When the radio gets busy" onchange={(on) => saveProfile({ notify_radio: on })} /></div>
 		{/if}
 		<div>
 			<div class="row" style="margin-bottom:8px"><BellOff size={18} strokeWidth={1.75} /><span>{muted ? `Muted until ${dayTime(session.me?.mute_until)}` : 'Mute everything for a while'}</span></div>
@@ -227,7 +228,7 @@
 			<h2>Camera alerts</h2>
 			{#each alerts.cameras as c (c.camera_id)}
 				<div class="stack" style="gap:8px">
-					<label class="spread"><span>{c.camera_name}</span><input type="checkbox" checked={c.enabled} onchange={(e) => setAlert(c, { enabled: (e.target as HTMLInputElement).checked })} /></label>
+					<div class="spread"><span>{c.camera_name}</span><Switch checked={c.enabled} label={`Alerts from ${c.camera_name}`} onchange={(on) => setAlert(c, { enabled: on })} /></div>
 					{#if c.enabled}
 						<div class="row wrap">
 							{#each alerts.types as t (t)}
@@ -304,9 +305,6 @@
 	.swatch.on {
 		border-color: var(--text);
 		box-shadow: inset 0 0 0 2px var(--surface);
-	}
-	label.spread {
-		min-height: var(--tap);
 	}
 	.chipbtn {
 		min-height: var(--tap);

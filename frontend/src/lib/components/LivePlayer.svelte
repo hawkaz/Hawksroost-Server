@@ -181,7 +181,9 @@
 	});
 </script>
 
-<div class="player">
+<!-- The page title names the camera; the browser's own controls (sound, full screen)
+     sit along the bottom, so no name strip over them. -->
+<div class="player" role="region" aria-label={`${name}, live`}>
 	{#if playing}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -224,7 +226,6 @@
 			<span>Paused to save the cabin's internet. Tap to keep watching.</span>
 		</button>
 	{/if}
-	<div class="scrim"><span>{name}</span></div>
 </div>
 
 <style>
@@ -302,15 +303,5 @@
 		position: absolute;
 		top: var(--space-2);
 		left: var(--space-2);
-	}
-	.scrim {
-		position: absolute;
-		inset: auto 0 0 0;
-		padding: var(--space-5) var(--space-3) var(--space-2);
-		background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
-		color: #fff;
-		font-weight: 500;
-		font-size: 14px;
-		pointer-events: none;
 	}
 </style>
