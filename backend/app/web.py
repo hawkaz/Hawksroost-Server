@@ -1,9 +1,10 @@
-"""Request helpers: public URL, cookie flags, signed values."""
+"""Request helpers: public URL, cookie flags, signed values, download names."""
 import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 
 from fastapi import Request, Response
 from sqlalchemy.orm import Session
@@ -52,3 +53,9 @@ def unsign(value: str | None) -> dict | None:
         return json.loads(base64.urlsafe_b64decode(raw))
     except ValueError:
         return None
+
+
+def file_name(*parts: str, ext: str) -> str:
+    """A download name that's safe in a header and on any computer: "Porch_deck-20260704-1800.jpg"."""
+    stem = "-".join(filter(None, (re.sub(r"[^A-Za-z0-9.-]+", "_", p).strip("._-") for p in parts)))
+    return f"{stem or 'file'}.{ext}"

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -29,6 +30,20 @@ def make_engine(url: str | None = None):
 
 engine = make_engine()
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+@contextmanager
+def foreign_keys_off(connection):
+    """For schema changes. SQLite changes a table by rebuilding it (copy, drop, rename),
+    and with foreign keys on, dropping the old copy also deletes every row that points
+    at it (ON DELETE CASCADE): rebuilding users would take every booking with it."""
+    connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+    connection.commit()
+    try:
+        yield connection
+    finally:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        connection.commit()
 
 
 def get_db() -> Iterator[Session]:

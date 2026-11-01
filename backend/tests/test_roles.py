@@ -34,6 +34,22 @@ def test_settings_secrets_write_only(client):
     assert all_settings["google"]["redirect_uri"].endswith("/api/auth/google/callback")
 
 
+def test_settings_numbers_stay_sensible(client):
+    """A cleared or silly number is refused with a plain message, and nothing is saved."""
+    from .conftest import login
+    login(client, "admin")
+    put = lambda body: client.put("/api/admin/settings/backup", json=body)  # noqa: E731
+    assert put({"hour": 4, "keep_days": 7}).json()["keep_days"] == 7
+    for body, says in (({"keep_days": None}, "needs a whole number"), ({"keep_days": 0}, "from 1 to 365"),
+                       ({"hour": 24}, "from 0 to 23"), ({"hour": 2.5}, "whole number"), ({"hour": "soon"}, "whole number")):
+        r = put({"hour": 5} | body)
+        assert r.status_code == 422 and says in r.json()["detail"], (body, r.text)
+    saved = client.get("/api/admin/settings").json()["backup"]
+    assert saved["hour"] == 4 and saved["keep_days"] == 7      # nothing half-saved
+    assert client.put("/api/admin/settings/radio", json={"join_gap_s": "15"}).json()["join_gap_s"] == 15
+    assert client.put("/api/admin/settings/general", json={"units": "furlongs"}).status_code == 422
+
+
 def test_login_photo_upload(client):
     login(client, "admin")
     assert client.get("/api/auth/config").json()["login_photo"] is None
@@ -50,3 +66,19 @@ def test_login_photo_rejects_non_images(client):
     login(client, "admin")
     r = client.put("/api/admin/login-photo", content=b"<svg>", headers={"Content-Type": "image/svg+xml"})
     assert r.status_code == 400
+
+
+def test_download_names_are_plain():
+    from app.web import file_name
+    assert file_name("Porch deck", "2026-07-04-180000", ext="jpg") == "Porch_deck-2026-07-04-180000.jpg"
+    assert file_name('Mom\'s "cabin" ☀\r\n', "x/y", ext="mp4") == "Mom_s_cabin-x_y.mp4"
+    assert file_name("154.4450 MHz", ext="mp3") == "154.4450_MHz.mp3"
+    assert file_name("..", ext="mp3") == "file.mp3"
+
+
+def test_list_sizes_are_checked(client):
+    from .conftest import login
+    login(client, "viewer")
+    assert client.get("/api/radio/recordings?limit=-1").status_code == 422   # SQLite reads -1 as "everything"
+    assert client.get("/api/radio/recordings?limit=60").status_code == 200
+    assert client.get("/api/cameras/1/events?limit=0").status_code == 422

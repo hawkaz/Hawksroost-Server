@@ -38,8 +38,10 @@ RETENTION_EVERY_S = 600
 CALLS = "calls"            # finished calls live in recordings/calls/
 MAX_CALL_S = 15 * 60       # a busy channel still gets split into calls of at most this long
 
-active: dict[str, dict] = {}   # file name → info, for transmissions in progress
-_durations: dict[tuple[str, int], float] = {}   # (name, size) → seconds
+# File name → info, for transmissions in progress. Replaced whole, never changed in place:
+# it's filled in a worker thread while the status route reads it from another.
+active: dict[str, dict] = {}
+_durations: dict[tuple[str, int], float] = {}   # (name, size) → seconds, for files still on disk
 _legacy: set[str] | None = None                 # files indexed one-per-transmission before calls existed
 
 
@@ -148,6 +150,7 @@ def process_files(db: Session, now: datetime | None = None) -> list[RadioRecordi
     finished: dict[tuple, list[Part]] = {}
     in_progress: dict[tuple, list[datetime]] = {}
     now_active = {}
+    seen: set[tuple[str, int]] = set()
     for entry in config.RECORDINGS_DIR.iterdir():
         info = parse_name(entry.name)
         if info is None or entry.name in _legacy:
@@ -157,10 +160,13 @@ def process_files(db: Session, now: datetime | None = None) -> list[RadioRecordi
             in_progress.setdefault(_key(info), []).append(info["started_at"])
             continue
         size = entry.stat().st_size
+        seen.add((entry.name, size))
         dur = _durations.get((entry.name, size))
         if dur is None:
             dur = _durations[(entry.name, size)] = _duration(entry)
         finished.setdefault(_key(info), []).append(Part(entry, info, dur))
+    for gone in _durations.keys() - seen:   # joined into calls or deleted
+        del _durations[gone]
 
     new_rows = []
     for key, parts in finished.items():
@@ -196,13 +202,19 @@ def process_files(db: Session, now: datetime | None = None) -> list[RadioRecordi
             new_rows.append(rec)
     db.commit()
 
-    active.clear()
+    live = {}
     for name, info in now_active.items():
         ch = match_channel(db, info)
-        active[name] = {"channel_id": ch.id if ch else None, "label": ch.label if ch else info["template"],
-                        "group": ch.group if ch else None, "freq_mhz": info["freq_mhz"] or (ch.freq_mhz if ch else None),
-                        "since": info["started_at"]}
+        live[name] = {"channel_id": ch.id if ch else None, "label": ch.label if ch else info["template"],
+                      "group": ch.group if ch else None, "freq_mhz": info["freq_mhz"] or (ch.freq_mhz if ch else None),
+                      "since": info["started_at"]}
+    _set_active(live)
     return new_rows
+
+
+def _set_active(live: dict[str, dict]) -> None:
+    global active
+    active = live
 
 
 async def detect_incidents(db: Session, new_rows: list[RadioRecording]) -> None:
@@ -315,7 +327,7 @@ async def run() -> None:
                         if n:
                             log.info("radio retention removed %s recordings", n)
             else:
-                active.clear()
+                _set_active({})
         except asyncio.CancelledError:
             raise
         except Exception:

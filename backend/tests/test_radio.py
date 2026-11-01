@@ -131,11 +131,17 @@ def test_call_waits_while_the_channel_might_answer(recdir):
     with SessionLocal() as db:
         assert _rf.process_files(db, now=t0 + _td(seconds=8)) == []      # only 6 s of quiet so far
         _tx("ch1", reply, 2, tmp=True)                                   # someone answers 9 s after...
+        before = _rf.active
         assert _rf.process_files(db, now=t0 + _td(seconds=25)) == []     # ...and is still talking: wait
+        assert [a["since"] for a in _rf.active.values()] == [reply]      # shown as on the air now
+        assert before == {} and _rf.active is not before                 # replaced, never changed in place
         (recdir / f"ch1_{reply:%Y%m%d_%H%M%S}_154445000.mp3.tmp").unlink()
         _tx("ch1", reply, 2)                                             # the reply finishes
         rows = _rf.process_files(db, now=t0 + _td(seconds=30))
         assert [r.parts for r in rows] == [2]
+        assert _rf.active == {}
+        _rf.process_files(db, now=t0 + _td(seconds=40))
+        assert _rf._durations == {}                                      # parts joined: nothing left to remember
 
 
 @needs_ffmpeg

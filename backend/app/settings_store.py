@@ -73,6 +73,42 @@ SECRETS: dict[str, set[str]] = {
 
 HIDDEN_SECTIONS = {"push"}
 
+# Number settings people type in: (lowest, highest, what to call it in a message).
+# A blank or 0 that slipped through could, say, delete every backup at night.
+LIMITS: dict[str, dict[str, tuple[int, int, str]]] = {
+    "tempest": {"elevation_ft": (-1000, 15000, "Station elevation")},
+    "alerts": {"default_cooldown_s": (0, 86400, "Seconds between alerts")},
+    "radio": {
+        "join_gap_s": (0, 120, "The join time"),
+        "min_call_s": (0, 120, "The shortest call"),
+        "max_storage_gb": (1, 10000, "The storage limit"),
+        "max_age_days": (1, 3650, "Days to keep calls"),
+        "incident_tx_count": (2, 500, "The busy alert count"),
+        "incident_window_min": (1, 240, "The busy alert minutes"),
+        "incident_cooldown_min": (1, 1440, "The quiet minutes"),
+    },
+    "backup": {"hour": (0, 23, "The backup hour"), "keep_days": (1, 365, "Days of backups to keep")},
+}
+CHOICES: dict[str, dict[str, set[str]]] = {"general": {"units": {"imperial", "metric"}}}
+
+
+class Invalid(ValueError):
+    """A setting someone typed is out of range; the message says what to fix."""
+
+
+def _number(section: str, key: str, value: Any) -> int:
+    lo, hi, name = LIMITS.get(section, {}).get(key, (None, None, "That number"))
+    try:
+        f = float(value)
+        if not f.is_integer():
+            raise ValueError
+    except (TypeError, ValueError):
+        raise Invalid(f"{name} needs a whole number.") from None
+    n = int(f)
+    if lo is not None and not lo <= n <= hi:
+        raise Invalid(f"{name} has to be from {lo} to {hi}.")
+    return n
+
 
 def get(db: Session, section: str) -> dict[str, Any]:
     """Full settings for a section, including secrets. Server-side use only."""
@@ -92,7 +128,8 @@ def public(db: Session, section: str) -> dict[str, Any]:
 
 
 def update(db: Session, section: str, changes: dict[str, Any]) -> dict[str, Any]:
-    """Merge changes into a section. A secret sent as None/missing is left unchanged; "" clears it."""
+    """Merge changes into a section. A secret sent as None/missing is left unchanged; "" clears it.
+    Raises Invalid (nothing saved) when a value is out of range."""
     defaults = SECTIONS[section]
     current = get(db, section)
     for key, value in changes.items():
@@ -103,10 +140,13 @@ def update(db: Session, section: str, changes: dict[str, Any]) -> dict[str, Any]
         default = defaults[key]
         if isinstance(default, bool):
             value = bool(value)
-        elif isinstance(default, int) and value is not None and value != "":
-            value = int(value)
+        elif isinstance(default, int):
+            value = _number(section, key, value)
         elif isinstance(default, str):
             value = "" if value is None else str(value).strip()
+            allowed = CHOICES.get(section, {}).get(key)
+            if allowed and value not in allowed:
+                raise Invalid("Pick one of the choices.")
         current[key] = value
     row = db.get(Setting, section)
     if row is None:

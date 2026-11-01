@@ -176,6 +176,8 @@ def put_settings(section: str, body: dict, request: Request, db: Session = Depen
     body = {k: v for k, v in body.items() if not k.startswith("login_photo")}  # set via /login-photo
     try:
         settings_store.update(db, section, body)
+    except settings_store.Invalid as e:
+        raise HTTPException(422, str(e))
     except (TypeError, ValueError):
         raise HTTPException(400, "Check the values and try again.")
     return get_settings(request, db)[section]

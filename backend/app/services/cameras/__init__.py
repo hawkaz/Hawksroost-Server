@@ -62,6 +62,7 @@ class CameraManager:
         self.conns: dict[int, Conn] = {}
         self.last_push: dict[tuple[int, int], float] = {}   # (user, camera) → loop time
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._reloading: dict[int, asyncio.Lock] = {}       # one reload at a time per camera
 
     # --- lifecycle ---------------------------------------------------------------
 
@@ -89,17 +90,20 @@ class CameraManager:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     async def _reload(self, cam_id: int) -> None:
-        await self._disconnect(cam_id)
-        with SessionLocal() as db:
-            cam = db.get(Camera, cam_id)
-            if cam is None or not cam.enabled:
-                await go2rtc.preload(stream_names(cam_id)["sub"], on=False)
-                for name in stream_names(cam_id).values():
-                    await go2rtc.remove_stream(name)
-                return
-            conn = Conn(cam_id=cam.id, driver=make_driver(cam))
-        self.conns[cam_id] = conn
-        conn.task = asyncio.get_running_loop().create_task(self._run(conn))
+        # Saving twice quickly starts two reloads; without the lock both could connect
+        # and the first connection would run on unseen (double events and alerts).
+        async with self._reloading.setdefault(cam_id, asyncio.Lock()):
+            await self._disconnect(cam_id)
+            with SessionLocal() as db:
+                cam = db.get(Camera, cam_id)
+                if cam is None or not cam.enabled:
+                    await go2rtc.preload(stream_names(cam_id)["sub"], on=False)
+                    for name in stream_names(cam_id).values():
+                        await go2rtc.remove_stream(name)
+                    return
+                conn = Conn(cam_id=cam.id, driver=make_driver(cam))
+            self.conns[cam_id] = conn
+            conn.task = asyncio.get_running_loop().create_task(self._run(conn))
 
     async def _disconnect(self, cam_id: int) -> None:
         conn = self.conns.pop(cam_id, None)
@@ -107,6 +111,7 @@ class CameraManager:
             return
         if conn.task:
             conn.task.cancel()
+            await asyncio.wait({conn.task}, timeout=5)   # let it finish before closing its driver
         await conn.driver.close()
 
     # --- connection loop -------------------------------------------------------------

@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass, field
 
 from .. import config
+from ..web import file_name
 from .cameras import manager
 
 log = logging.getLogger("hawk.clips")
@@ -34,6 +35,11 @@ class Job:
 
 
 jobs: dict[str, Job] = {}
+_fetching: dict[str, asyncio.Lock] = {}   # one download per camera file, however many clips want it
+
+
+class ClipsBusy(Exception):
+    """Can't start a clip right now; the message says why in plain words."""
 
 
 def _source_path(cam_id: int, name: str, stream: str):
@@ -43,9 +49,15 @@ def _source_path(cam_id: int, name: str, stream: str):
 
 async def _fetch(job: Job, name: str, start_id: str, end_id: str, stream: str):
     path = _source_path(job.cam_id, name, stream)
-    if path.exists() and path.stat().st_size > 0:
-        path.touch()
-        return path
+    # Two clips from the same recording share one download: the second waits for the first.
+    async with _fetching.setdefault(str(path), asyncio.Lock()):
+        if path.exists() and path.stat().st_size > 0:
+            path.touch()
+            return path
+        return await _download(job, path, name, start_id, end_id, stream)
+
+
+async def _download(job: Job, path, name: str, start_id: str, end_id: str, stream: str):
     vod = await manager.download(job.cam_id, name, start_id, end_id, stream)
     tmp = path.with_suffix(".part")
     got = 0
@@ -87,15 +99,21 @@ def start(cam_id: int, cam_name: str, name: str, start_id: str, end_id: str, str
     cleanup()
     busy = [j for j in jobs.values() if j.status in ("fetching", "cutting")]
     if len(busy) >= MAX_JOBS:
-        raise RuntimeError("A few clips are already being made. Try again in a minute.")
+        raise ClipsBusy("A few clips are already being made. Try again in a minute.")
     if shutil.which("ffmpeg") is None:
-        raise RuntimeError("Clips need ffmpeg, which isn't installed on the server.")
+        raise ClipsBusy("Clips need ffmpeg, which isn't installed on the server.")
     config.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
     job = Job(id=secrets.token_urlsafe(9), cam_id=cam_id,
-              filename=f"{cam_name}-{label}.mp4".replace(" ", "_").replace("/", "-"))
+              filename=file_name(cam_name, label, ext="mp4"))
     jobs[job.id] = job
-    asyncio.get_running_loop().create_task(_run(job, name, start_id, end_id, stream, offset_s, length_s))
+    # Must be called on the event loop (an async route), where the background job runs.
+    task = asyncio.get_running_loop().create_task(_run(job, name, start_id, end_id, stream, offset_s, length_s))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
     return job
+
+
+_tasks: set[asyncio.Task] = set()   # keep references so running jobs aren't garbage-collected
 
 
 def clip_path(job: Job):

@@ -24,6 +24,31 @@ def test_starlink_rollup_measures_minutes():
     assert all(r["power_w"] == 40.0 and r["down_peak_bps"] == 8000.0 for r in rows)
 
 
+def test_starlink_minute_split_across_polls_merges():
+    """Polls don't line up with minutes: the two parts of a minute make one fair row."""
+    from app.collector.starlink import _save
+    from app.db import SessionLocal
+    from app.models import StarlinkSample
+
+    def bulk(n, latency, down, peak_at=None):
+        d = [down] * n
+        if peak_at is not None:
+            d[peak_at] = 50_000.0
+        return {"pop_ping_latency_ms": [latency] * n, "pop_ping_drop_rate": [0.0] * n,
+                "downlink_throughput_bps": d, "uplink_throughput_bps": [800.0] * n,
+                "power_w": [40.0] * n, "obstructed": [False] * n}
+
+    # 20 seconds (12:00:00-12:00:19) in one poll with a burst, the other 40 in the next.
+    _save(rollup(datetime(2026, 7, 1, 12, 0, 19), bulk(20, 30.0, 1000.0, peak_at=5), 20))
+    _save(rollup(datetime(2026, 7, 1, 12, 0, 59), bulk(40, 60.0, 4000.0), 40))
+    with SessionLocal() as db:
+        row = db.query(StarlinkSample).one()
+    assert row.seconds == 60
+    assert row.latency_ms == 50.0                       # (30×20 + 60×40) / 60
+    assert row.down_peak_bps == 50_000.0                # the burst in the first part is kept
+    assert abs(row.down_bps - (1000 * 19 + 50_000 + 4000 * 40) / 60) < 1e-6
+
+
 def test_starlink_api_shapes(client):
     from app import state
     from app.db import SessionLocal

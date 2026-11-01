@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 
 from cryptography.hazmat.primitives import serialization
-from py_vapid import Vapid01
+from py_vapid import Vapid02
 from pywebpush import WebPushException, webpush
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ def ensure_keys(db: Session) -> None:
     cfg = settings_store.get(db, "push")
     if cfg["vapid_private_pem"] and cfg["vapid_public_key"]:
         return
-    v = Vapid01()
+    v = Vapid02()
     v.generate_keys()
     pem = v.private_pem().decode()
     raw = v.public_key.public_bytes(
@@ -47,12 +47,13 @@ def is_muted(user: User, now: datetime | None = None) -> bool:
     return bool(user.mute_until and user.mute_until > (now or utcnow()))
 
 
-def _send_one(sub: PushSubscription, payload: str, vapid: Vapid01, claims: dict) -> int | None:
+def _send_one(sub: PushSubscription, payload: str, vapid: Vapid02, claims: dict) -> int | None:
     """Returns an HTTP status on failure, None on success."""
     try:
         webpush(
             {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
             data=payload, vapid_private_key=vapid, vapid_claims=dict(claims), ttl=3600,
+            timeout=10,   # a push service that doesn't answer mustn't hold up the alert to everyone else
         )
         return None
     except WebPushException as e:
@@ -72,7 +73,9 @@ async def send_to_users(
     cfg = settings_store.get(db, "push")
     if not cfg["vapid_private_pem"]:
         return 0
-    vapid = Vapid01.from_pem(cfg["vapid_private_pem"].encode())
+    # RFC 8292 VAPID ("Authorization: vapid t=…, k=…"), which every push service takes,
+    # Apple's included. Same keys as before, so existing devices stay subscribed.
+    vapid = Vapid02.from_pem(cfg["vapid_private_pem"].encode())
     claims = {"sub": _contact(db)}
     payload = json.dumps({"title": title, "body": body, "url": url, "tag": tag, "image": image})
     subs = db.scalars(select(PushSubscription).where(PushSubscription.user_id.in_(user_ids))).all()

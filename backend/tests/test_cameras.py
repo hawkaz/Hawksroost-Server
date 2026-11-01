@@ -140,6 +140,54 @@ def test_only_new_detections_become_events(monkeypatch):
     assert started == ["motion", "person", "motion"]
 
 
+def test_quick_saves_leave_one_connection(monkeypatch):
+    """Saving a camera twice in a row (or three times) must not leave two connections running."""
+    with SessionLocal() as db:
+        cam = Camera(name="Porch", kind="stream", host="h", options={"main_url": "rtsp://h/main"})
+        db.add(cam)
+        db.commit()
+        cam_id = cam.id
+    made = []
+
+    class SlowClose(FakeDriver):
+        closed = False
+
+        async def connect(self):
+            await asyncio.sleep(0.01)
+            return await super().connect()
+
+        async def watch(self, on_change):
+            await asyncio.Event().wait()
+
+        async def close(self):
+            await asyncio.sleep(0.05)
+            self.closed = True
+
+    def make(cam):
+        made.append(SlowClose(cam.id, "h", None, "", "", 0, {}))
+        return made[-1]
+
+    async def ok(*a, **kw):
+        return True
+
+    monkeypatch.setattr(cams, "make_driver", make)
+    for name in ("set_stream", "remove_stream", "preload"):
+        monkeypatch.setattr(cams.go2rtc, name, ok)
+
+    async def run():
+        m = cams.CameraManager()
+        m._loop = asyncio.get_running_loop()
+        await asyncio.gather(m._reload(cam_id), m._reload(cam_id), m._reload(cam_id))
+        await asyncio.sleep(0.1)
+        running = [d for d in made if not d.closed]
+        assert len(made) == 3 and running == [m.conns[cam_id].driver]
+        assert m.online(cam_id)
+        await m.stop()
+        assert all(d.closed for d in made)
+
+    asyncio.run(run())
+
+
 def test_unsupported_by_default():
     d = Driver(1, "h", None, "", "", 0, {})
 

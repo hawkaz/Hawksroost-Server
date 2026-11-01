@@ -1,7 +1,7 @@
 """Radio: scanner status, recordings, keep, incidents. Admin: dongles and channels."""
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from typing import Literal
 
@@ -15,6 +15,7 @@ from ..deps import admin, member, viewer
 from ..models import RadioChannel, RadioDevice, RadioIncident, RadioRecording, User
 from ..services import radio_config, radio_files
 from ..timeutil import LOCAL_TZ, iso, utcnow
+from ..web import file_name
 
 router = APIRouter(tags=["radio"])
 
@@ -131,7 +132,7 @@ def channels(db: Session = Depends(get_db), _: User = Depends(viewer)):
 
 @router.get("/api/radio/recordings")
 def recordings(channel_id: int | None = None, group: str | None = None, day: date | None = None,
-               keep: bool | None = None, before: datetime | None = None, limit: int = 100,
+               keep: bool | None = None, before: datetime | None = None, limit: int = Query(100, ge=1, le=300),
                db: Session = Depends(get_db), _: User = Depends(viewer)):
     q = select(RadioRecording)
     if channel_id:
@@ -146,7 +147,7 @@ def recordings(channel_id: int | None = None, group: str | None = None, day: dat
         q = q.where(RadioRecording.keep.is_(keep))
     if before:
         q = q.where(RadioRecording.started_at < before.replace(tzinfo=None))
-    rows = db.scalars(q.order_by(RadioRecording.started_at.desc()).limit(min(limit, 300))).all()
+    rows = db.scalars(q.order_by(RadioRecording.started_at.desc()).limit(limit)).all()
     groups = {c.id: c.group for c in db.scalars(select(RadioChannel))}
     return [_rec(r, groups) for r in rows]
 
@@ -159,7 +160,7 @@ def audio(rec_id: int, download: bool = False, db: Session = Depends(get_db), _:
     path = (config.RECORDINGS_DIR / r.path).resolve()
     if not path.is_relative_to(config.RECORDINGS_DIR.resolve()) or not path.exists():
         raise HTTPException(404, "That recording was cleaned up.")
-    name = f"{r.label}-{r.started_at:%Y%m%d-%H%M%S}.mp3".replace(" ", "_").replace("/", "-")
+    name = file_name(r.label, f"{r.started_at:%Y%m%d-%H%M%S}", ext="mp3")
     return FileResponse(path, media_type="audio/mpeg", filename=name if download else None,
                         content_disposition_type="attachment" if download else "inline")
 

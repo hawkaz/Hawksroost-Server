@@ -83,7 +83,7 @@ def test_remember_me_off_gives_browser_session(client):
     assert r.status_code == 200
     cookie = r.headers["set-cookie"]
     assert "hr_session=" in cookie and "Max-Age" not in cookie
-    r2 = client.post("/api/auth/logout")
+    assert client.post("/api/auth/logout").status_code in (200, 204)
     r = client.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct horse"})
     assert "Max-Age" in r.headers["set-cookie"]
 

@@ -38,7 +38,9 @@
 		const body: Record<string, unknown> = {};
 		for (const f of fields) {
 			const v = draft[f.key];
-			body[f.key] = f.type === 'password' && v === '' ? null : f.type === 'number' ? Number(v) : v;
+			const blank = v === '' || v === null || v === undefined;
+			// A cleared number goes as null, so the server asks for one rather than saving 0.
+			body[f.key] = f.type === 'password' && v === '' ? null : f.type === 'number' ? (blank ? null : Number(v)) : v;
 		}
 		try {
 			values = await api.put(`/api/admin/settings/${section}`, body);

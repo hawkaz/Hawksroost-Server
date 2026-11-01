@@ -7,4 +7,5 @@ RUN npm run build
 
 FROM nginx:1.29-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx-headers.conf /etc/nginx/hawk-headers.conf
 COPY --from=build /src/build /usr/share/nginx/html

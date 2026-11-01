@@ -13,6 +13,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import starlink_grpc
+from sqlalchemy import case, func
 from sqlalchemy.dialects.sqlite import insert
 
 from .. import settings_store, state
@@ -133,16 +134,25 @@ def rollup(end: datetime, bulk: dict, samples: int) -> list[dict]:
 def _save(rows: list[dict]) -> None:
     with SessionLocal() as db:
         for r in rows:
-            # A minute can be split across two polls: merge into the existing row.
+            # A minute can be split across two polls: merge into the existing row. Averages
+            # are weighted by the seconds each part covers; peaks keep the higher one.
             stmt = insert(StarlinkSample).values(**r)
-            ex = stmt.excluded
-            total = StarlinkSample.seconds + ex.seconds
+            old, new = StarlinkSample, stmt.excluded
+            total = old.seconds + new.seconds
+
+            def avg(col: str):
+                a, b = getattr(old, col), getattr(new, col)
+                return case((a.is_(None), b), (b.is_(None), a),
+                            else_=(a * old.seconds + b * new.seconds) / func.max(total, 1))
+
+            def peak(col: str):
+                return func.max(func.coalesce(getattr(old, col), 0), func.coalesce(getattr(new, col), 0))
+
             stmt = stmt.on_conflict_do_update(index_elements=["ts"], set_={
-                "latency_ms": ex.latency_ms, "drop_rate": ex.drop_rate,
-                "down_bps": ex.down_bps, "up_bps": ex.up_bps, "power_w": ex.power_w,
-                "down_peak_bps": ex.down_peak_bps, "up_peak_bps": ex.up_peak_bps,
-                "obstructed_s": StarlinkSample.obstructed_s + ex.obstructed_s,
-                "outage_s": StarlinkSample.outage_s + ex.outage_s,
+                **{c: avg(c) for c in ("latency_ms", "drop_rate", "down_bps", "up_bps", "power_w")},
+                "down_peak_bps": peak("down_peak_bps"), "up_peak_bps": peak("up_peak_bps"),
+                "obstructed_s": old.obstructed_s + new.obstructed_s,
+                "outage_s": old.outage_s + new.outage_s,
                 "seconds": total,
             })
             db.execute(stmt)

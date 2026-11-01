@@ -11,7 +11,7 @@ from typing import Literal
 
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
@@ -25,7 +25,7 @@ from ..security import can
 from ..services import clips
 from ..services.cameras import PTZ_COMMANDS, RecordingUnavailable, manager, stream_names, test_connection
 from ..timeutil import LOCAL_TZ, iso
-from ..web import sign, unsign
+from ..web import file_name, sign, unsign
 
 router = APIRouter(tags=["cameras"])
 
@@ -76,7 +76,7 @@ async def snapshot(cam_id: int, full: bool = False, download: bool = False,
     if download:
         cam = db.get(Camera, cam_id)
         stamp = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d-%H%M%S")
-        headers["Content-Disposition"] = f'attachment; filename="{(cam.name if cam else "camera").replace(" ", "_")}-{stamp}.jpg"'
+        headers["Content-Disposition"] = f'attachment; filename="{file_name(cam.name if cam else "camera", stamp, ext="jpg")}"'
     return Response(jpg, media_type="image/jpeg", headers=headers)
 
 
@@ -182,14 +182,15 @@ def _job_out(job: clips.Job) -> dict:
 
 
 @router.post("/api/cameras/{cam_id}/clips", status_code=202)
-def make_clip(cam_id: int, body: ClipIn, db: Session = Depends(get_db), _: User = Depends(viewer)):
+async def make_clip(cam_id: int, body: ClipIn, db: Session = Depends(get_db), _: User = Depends(viewer)):
+    # async: the clip job is started on the event loop (a plain def would run in a worker thread).
     cam = db.get(Camera, cam_id)
     if cam is None:
         raise HTTPException(404)
     try:
         job = clips.start(cam_id, cam.name, body.name, body.start_id, body.end_id, body.stream,
                           body.offset_s, body.length_s, body.label)
-    except RuntimeError as e:
+    except clips.ClipsBusy as e:
         raise HTTPException(429, str(e))
     return _job_out(job)
 
@@ -221,9 +222,10 @@ def signed_snapshot_url(event_id: int) -> str:
 
 
 @router.get("/api/cameras/{cam_id}/events")
-def events(cam_id: int, limit: int = 50, db: Session = Depends(get_db), _: User = Depends(viewer)):
+def events(cam_id: int, limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db),
+           _: User = Depends(viewer)):
     rows = db.scalars(select(CameraEvent).where(CameraEvent.camera_id == cam_id)
-                      .order_by(CameraEvent.started_at.desc()).limit(min(limit, 200))).all()
+                      .order_by(CameraEvent.started_at.desc()).limit(limit)).all()
     return [{"id": e.id, "type": e.type, "at": iso(e.started_at),
              "snapshot": f"/api/cameras/events/{e.id}/snapshot" if e.snapshot else None} for e in rows]
 
