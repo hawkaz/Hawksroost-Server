@@ -186,3 +186,10 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   sections with an overview. Fixed: weather history crashed (`range` shadowed
   Python's built-in), camera add/edit crashed reloading from a worker thread.
   Migration 0003. 41 tests pass.
+- 2026-11-01 — Camera added on the laptop (Reolink; main admin login, Chris's
+  choice). Live video didn't play: go2rtc refused the websocket because nginx
+  sent `Host: go2rtc:1984` while the browser's Origin was hawksroost.live.
+  nginx now passes the browser's host; reproduced and verified here against
+  go2rtc 1.9.15 (signed in → 101, signed out → 401, other site → 403). Player
+  now shows "Connecting…" until a picture arrives and offers a retry if none
+  does. Added `scripts/camera-check.sh`.

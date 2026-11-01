@@ -10,6 +10,10 @@
 	let playing = $state(true);
 	let ready = $state(false);
 	let failed = $state(false);
+	let live = $state(false); // picture actually arriving
+	let stalled = $state(false); // nothing after a while
+	let attempt = $state(0);
+	const STALL_S = 20;
 
 	async function loadComponent() {
 		if (customElements.get('video-stream')) return;
@@ -18,8 +22,22 @@
 	}
 
 	$effect(() => {
+		void attempt;
 		if (!playing || !host) return;
 		const el = host;
+		live = false;
+		stalled = false;
+		const started = Date.now();
+		// Watch for the first picture; say so if none comes instead of showing a black box.
+		const watch = setInterval(() => {
+			const v = el.querySelector('video');
+			if (v && (v.readyState >= 2 || v.poster)) {
+				live = true;
+				stalled = false;
+			} else if (!live && Date.now() - started > STALL_S * 1000) {
+				stalled = true;
+			}
+		}, 1000);
 		let player: HTMLElement & { src?: string; mode?: string; background?: boolean } | null = null;
 		let cancelled = false;
 		loadComponent()
@@ -38,6 +56,7 @@
 		return () => {
 			cancelled = true;
 			clearTimeout(stop);
+			clearInterval(watch);
 			el.replaceChildren();
 			ready = false;
 		};
@@ -47,8 +66,17 @@
 <div class="player">
 	{#if playing}
 		<div class="video" bind:this={host}></div>
-		{#if failed}<div class="over">Video isn't available right now.</div>{/if}
-		<div class="badge"><span class="chip live">Live</span></div>
+		{#if failed}
+			<div class="over">Video isn't available right now.</div>
+		{:else if stalled}
+			<button class="over" onclick={() => attempt++}>
+				<span>The video isn't coming through.</span>
+				<span class="small">Tap to try again.</span>
+			</button>
+		{/if}
+		<div class="badge">
+			{#if live}<span class="chip live">Live</span>{:else if !failed && !stalled}<span class="chip">Connecting…</span>{/if}
+		</div>
 	{:else}
 		<button class="over resume" onclick={() => (playing = true)}>
 			<Play size={36} strokeWidth={1.75} />
