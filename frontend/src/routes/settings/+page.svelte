@@ -4,7 +4,7 @@
 	import { BellOff, Shield } from '@lucide/svelte';
 	import { api } from '#lib/api.ts';
 	import { dayTime } from '#lib/format.ts';
-	import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, platform, pushSupported, type Platform } from '#lib/push.ts';
+	import { disablePush, enablePush, isIOS, isStandalone, platform, pushSupported, syncPush, type Platform } from '#lib/push.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { theme, type ThemePref } from '#lib/theme.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
@@ -36,7 +36,7 @@
 
 	$effect(() => {
 		canPush = pushSupported();
-		currentSubscription().then((s) => (pushOn = !!s)).catch(() => {});
+		syncPush().then((on) => (pushOn = on)).catch(() => {});
 		loadDevices();
 		api.get<typeof alerts>('/api/me/alerts').then((a) => (alerts = a)).catch(() => {});
 	});
@@ -112,8 +112,14 @@
 		}
 	}
 	async function signOut() {
-		await session.logout();
-		goto('/login');
+		try {
+			// This device stops getting this person's notifications (it may be a shared tablet).
+			await disablePush().catch(() => {});
+			await session.logout();
+			goto('/login');
+		} catch (e) {
+			toast.error(e);
+		}
 	}
 </script>
 

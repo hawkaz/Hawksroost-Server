@@ -1,27 +1,37 @@
 <script lang="ts">
 	// Bottom sheet on phones, centred dialog on tablets and computers.
 	import { X } from '@lucide/svelte';
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
+	import Toast from '#lib/components/Toast.svelte';
+	import { toast } from '#lib/toast.svelte.ts';
 
 	let { open = $bindable(false), title, children }: { open: boolean; title: string; children: Snippet } = $props();
 	let dialog: HTMLDialogElement | undefined = $state();
+	const id = $props.id();
 
 	$effect(() => {
 		if (!dialog) return;
 		if (open && !dialog.open) dialog.showModal();
 		if (!open && dialog.open) dialog.close();
 	});
+	// While open, messages (like "Pick who's coming.") show inside the sheet, not behind it.
+	$effect(() => {
+		if (!open) return;
+		untrack(() => toast.sheets++); // untracked: this effect mustn't re-run because of its own count
+		return () => untrack(() => toast.sheets--);
+	});
 </script>
 
-<dialog bind:this={dialog} onclose={() => (open = false)} onclick={(e) => e.target === dialog && (open = false)}>
+<dialog bind:this={dialog} aria-labelledby={id} onclose={() => (open = false)} onclick={(e) => e.target === dialog && (open = false)}>
 	{#if open}
 		<div class="sheet">
 			<div class="spread head">
-				<h2>{title}</h2>
+				<h2 {id}>{title}</h2>
 				<button class="btn icon" onclick={() => (open = false)} aria-label="Close"><X size={20} strokeWidth={1.75} /></button>
 			</div>
 			{@render children()}
 		</div>
+		<Toast inSheet />
 	{/if}
 </dialog>
 

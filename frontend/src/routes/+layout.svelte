@@ -18,6 +18,7 @@
 	import Mark from '#lib/components/Mark.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Toast from '#lib/components/Toast.svelte';
+	import { syncPush } from '#lib/push.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { theme } from '#lib/theme.svelte.ts';
 
@@ -65,16 +66,34 @@
 
 	$effect(() => {
 		if (!session.loaded) {
-			session.load().then((me) => {
-				if (!me && !isPublic) goto(`/login?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
-			});
+			session.load();
+			return;
+		}
+		// Signed out (also after Sign out, or Back to a private page): to the sign-in page.
+		if (!session.me && !session.unreachable && !isPublic) {
+			goto(`/login?next=${encodeURIComponent(page.url.pathname + page.url.search)}`, { replaceState: true });
 		}
 	});
-
+	// After signing in, this device's notifications (if it has them on) go to this person.
+	let pushFor = 0;
 	$effect(() => {
-		if ('serviceWorker' in navigator && location.protocol === 'https:') {
-			navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch(() => {});
-		}
+		const id = session.me?.id;
+		if (!id || id === pushFor) return;
+		pushFor = id;
+		syncPush().catch(() => {});
+	});
+	// Can't reach the cabin: try again when the device is back online.
+	let retrying = $state(false);
+	async function retry() {
+		retrying = true;
+		await session.load();
+		retrying = false;
+	}
+	$effect(() => {
+		if (!session.unreachable) return;
+		const back = () => retry();
+		window.addEventListener('online', back);
+		return () => window.removeEventListener('online', back);
 	});
 </script>
 
@@ -140,6 +159,15 @@
 			{/each}
 		</div>
 	</Sheet>
+{:else if session.unreachable}
+	<div class="loading">
+		<div class="offline stack">
+			<Mark size={56} hawk="var(--pine)" />
+			<h1>Can’t reach the cabin</h1>
+			<p class="muted">The cabin’s internet may be down, or the app is restarting. Check your connection and try again.</p>
+			<button class="btn" disabled={retrying} onclick={retry}>{retrying ? 'Trying…' : 'Try again'}</button>
+		</div>
+	</div>
 {:else}
 	<div class="loading" aria-busy="true"><Mark size={64} hawk="var(--pine)" /></div>
 {/if}
@@ -151,6 +179,12 @@
 		min-height: 100vh;
 		display: grid;
 		place-items: center;
+		padding: var(--space-4);
+	}
+	.offline {
+		max-width: 360px;
+		text-align: center;
+		align-items: center;
 	}
 
 	/* ---------- Phone (< 700px): top bar + bottom tabs ---------- */

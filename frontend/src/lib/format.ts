@@ -92,7 +92,6 @@ export function bytes(n: number | null | undefined): string {
 }
 
 export function duration(s: number): string {
-	if (s < 60) return `0:${String(Math.round(s)).padStart(2, '0')}`;
-	const m = Math.floor(s / 60);
-	return `${m}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+	const t = Math.round(s); // round first: 59.6 s is 1:00, not 0:60
+	return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 }

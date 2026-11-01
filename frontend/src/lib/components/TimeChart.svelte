@@ -55,9 +55,12 @@
 	const x = (ms: number) => M.l + ((ms - x0) / Math.max(1, x1 - x0)) * pw;
 
 	// --- y scale with "nice" ticks ---
+	// A steady reading (or averages a hair apart) counts as flat, so the step can't
+	// shrink below what a float can add: that once gave repeated ticks or never ended.
+	const flat = (lo: number, hi: number) => hi - lo <= 1e-9 * Math.max(1, Math.abs(lo), Math.abs(hi));
 	function nice(lo: number, hi: number, want = 4) {
 		if (!isFinite(lo) || !isFinite(hi)) return [0, 1];
-		if (lo === hi) {
+		if (flat(lo, hi)) {
 			lo -= 1;
 			hi += 1;
 		}
@@ -65,9 +68,14 @@
 		const mag = 10 ** Math.floor(Math.log10(raw));
 		const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
 		const ticks: number[] = [];
-		for (let v = Math.floor(lo / step) * step; v <= hi + step * 1e-6; v += step) ticks.push(+v.toFixed(6));
-		if (ticks[ticks.length - 1] < hi) ticks.push(+(ticks[ticks.length - 1] + step).toFixed(6));
-		return ticks;
+		const first = Math.floor(lo / step) * step;
+		for (let i = 0; i < 12; i++) {
+			const v = +(first + i * step).toFixed(6);
+			if (ticks.length && v <= ticks[ticks.length - 1]) continue;
+			ticks.push(v);
+			if (v >= hi) break;
+		}
+		return ticks.length > 1 ? ticks : [lo, hi];
 	}
 	const yTicks = $derived.by(() => {
 		const vals = data.flatMap((d) => [d.v, d.lo, d.hi]).filter((v): v is number => v != null);
@@ -75,7 +83,12 @@
 		let lo = Math.min(...vals);
 		let hi = Math.max(...vals);
 		if (zero || kind === 'bars') lo = Math.min(0, lo);
-		if (hi === lo) hi = lo + (Math.abs(lo) || 1) * ((zero || kind === 'bars') && lo >= 0 ? 1 : 0.1);
+		if (flat(lo, hi)) {
+			// A steady reading sits mid-chart; an all-zero bar chart runs 0 to 1.
+			const d = (Math.abs(lo) || 1) * 0.05;
+			if ((zero || kind === 'bars') && lo >= 0) hi = lo + (Math.abs(lo) || 1);
+			else [lo, hi] = [lo - d, hi + d];
+		}
 		const pad = (hi - lo) * 0.08;
 		return nice(zero || kind === 'bars' ? lo : lo - pad, hi + pad);
 	});
@@ -203,7 +216,7 @@
 		<p class="empty-chart" style="height:{height}px">No readings in this period yet.</p>
 	{:else}
 		<svg {width} {height} role="img" aria-label={label} onpointermove={move} onpointerleave={() => (hover = null)}>
-			{#each yTicks as v (v)}
+			{#each yTicks as v, i (i)}
 				<line class="grid" x1={M.l} x2={M.l + pw} y1={y(v)} y2={y(v)} />
 				<text class="axis" x={M.l - 8} y={y(v) + 4} text-anchor="end">{format(v)}</text>
 			{/each}

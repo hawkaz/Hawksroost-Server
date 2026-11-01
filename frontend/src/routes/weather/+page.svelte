@@ -250,7 +250,7 @@
 					{#if h.strikes.length}
 						<p><span class="data big">{h.strikes.length}</span> {h.strikes.length === 1 ? 'strike' : 'strikes'} detected, nearest <span class="data">{distance(strikeNearest, u)}</span>.</p>
 						<ul class="list strikes">
-							{#each h.strikes.slice(0, 6) as x (x.t)}
+							{#each h.strikes.slice(0, 6) as x, i (i)}
 								<li><span class="data">{distance(x.distance_km, u)}</span><span class="small muted">{shortDate(new Date(x.t).toLocaleDateString('en-CA', { timeZone: 'America/Phoenix' }))}, {time(x.t)}</span></li>
 							{/each}
 						</ul>

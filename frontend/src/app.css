@@ -383,7 +383,7 @@ input[type='checkbox'] {
 }
 .pill-tabs button,
 .pill-tabs a {
-	min-height: 38px;
+	min-height: var(--tap);
 	padding: 0 var(--space-4);
 	border-radius: var(--radius-pill);
 	border: 0;

@@ -2,6 +2,9 @@
 class Toasts {
 	message = $state<string | null>(null);
 	kind = $state<'info' | 'error'>('info');
+	/** Sheets open right now. A sheet is a modal dialog that covers the page, so while one
+	 * is open the message shows inside it instead. */
+	sheets = $state(0);
 	#timer: ReturnType<typeof setTimeout> | undefined;
 
 	show(message: string, kind: 'info' | 'error' = 'info') {

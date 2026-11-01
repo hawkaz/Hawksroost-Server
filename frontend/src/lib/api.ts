@@ -10,16 +10,22 @@ export class ApiError extends Error {
 	}
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+// Older iPhones (iOS 15) have no AbortSignal.timeout; they just wait as before.
+const timeout = (ms: number) => ('timeout' in AbortSignal ? AbortSignal.timeout(ms) : undefined);
+
+async function request<T>(method: string, path: string, body?: unknown, timeoutMs = 30000): Promise<T> {
 	let res: Response;
 	try {
 		res = await fetch(path, {
 			method,
 			credentials: 'same-origin',
 			headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
-			body: body !== undefined ? JSON.stringify(body) : undefined
+			body: body !== undefined ? JSON.stringify(body) : undefined,
+			signal: timeout(timeoutMs)
 		});
-	} catch {
+	} catch (e) {
+		if (e instanceof DOMException && e.name === 'TimeoutError')
+			throw new ApiError(0, 'The cabin is taking too long to answer. Try again in a minute.');
 		throw new ApiError(0, "Can't reach the cabin right now. Check your connection.");
 	}
 	if (res.status === 401 && !path.startsWith('/api/auth/')) {
@@ -59,7 +65,7 @@ async function upload<T>(path: string, blob: Blob): Promise<T> {
 
 export const api = {
 	upload,
-	get: <T>(path: string) => request<T>('GET', path),
+	get: <T>(path: string, timeoutMs?: number) => request<T>('GET', path, undefined, timeoutMs),
 	post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
 	put: <T>(path: string, body: unknown = {}) => request<T>('PUT', path, body),
 	patch: <T>(path: string, body: unknown = {}) => request<T>('PATCH', path, body),

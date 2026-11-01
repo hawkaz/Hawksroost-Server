@@ -64,3 +64,14 @@ export async function disablePush(): Promise<void> {
 	await api.post('/api/me/push/remove', { endpoint: sub.endpoint });
 	await sub.unsubscribe();
 }
+
+/** Notifications go to whoever is signed in on this device: if it already has a
+ * subscription (someone turned them on earlier), point it at the current person. */
+export async function syncPush(): Promise<boolean> {
+	if (!pushSupported() || Notification.permission !== 'granted') return false;
+	const sub = await currentSubscription();
+	if (!sub) return false;
+	const json = sub.toJSON();
+	await api.post('/api/me/push', { endpoint: json.endpoint, keys: json.keys, device_label: deviceLabel() });
+	return true;
+}

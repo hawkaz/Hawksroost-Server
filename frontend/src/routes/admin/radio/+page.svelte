@@ -176,7 +176,7 @@
 				{#each plan.devices as d (d.id)}
 					<div class="small">{d.name}: {d.mode === 'off' ? 'no channels on' : `${d.mode}, ${d.channels} channels${d.centerfreq ? `, centred on ${d.centerfreq.toFixed(3)} MHz` : ''}`}</div>
 				{/each}
-				{#each plan.errors as e (e)}<p class="notice danger">{e}</p>{/each}
+				{#each plan.errors as e, i (i)}<p class="notice danger">{e}</p>{/each}
 			{/if}
 		</section>
 	{/if}

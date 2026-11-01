@@ -50,7 +50,7 @@
 					<span class="small muted">{problems ? `${problems} need${problems === 1 ? 's' : ''} a look` : 'All good'}</span>
 				</div>
 				<ul class="list">
-					{#each h.items as i (i.name)}
+					{#each h.items as i, n (n)}
 						<li>
 							<span class:ok={i.ok} class:warn={!i.ok} class="icon">{#if i.ok}<CircleCheck size={20} strokeWidth={1.75} />{:else}<CircleAlert size={20} strokeWidth={1.75} />{/if}</span>
 							<div class="grow"><div>{i.name}</div><div class="small muted">{i.detail}</div></div>
