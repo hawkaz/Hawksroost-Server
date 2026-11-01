@@ -63,7 +63,7 @@ PY
 
 echo
 echo "== nginx: video player files and sign-in guard"
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/video/video-stream.js" || true)
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/video/video-rtc.js" || true)
 if [ "$code" = "200" ]; then echo "OK   player script loads (200)"; else echo "FAIL player script: HTTP $code"; fi
 code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/video/api/ws?src=cam1_sub" || true)
 if [ "$code" = "401" ]; then echo "OK   live video needs sign-in (401 without it)"; else echo "FAIL live video guard: HTTP $code (expected 401)"; fi

@@ -27,6 +27,19 @@ async def set_stream(name: str, src: str) -> bool:
         return False
 
 
+async def preload(name: str, on: bool = True) -> bool:
+    """Keep (or stop keeping) a stream connected to its camera even with nobody watching,
+    so opening the camera doesn't wait for the camera to start a stream. Traffic stays on
+    the cabin network. go2rtc 1.9.11+; it only works while the camera answers."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await (c.put if on else c.delete)(f"{config.GO2RTC_URL}/api/preload", params={"src": name})
+            return r.status_code < 400
+    except httpx.HTTPError as e:
+        log.info("go2rtc preload %s: %s", name, e)
+        return False
+
+
 async def remove_stream(name: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=5) as c:

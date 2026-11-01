@@ -3,12 +3,12 @@
 	// Stops by itself after a few minutes so the cabin's Starlink upload isn't
 	// used by a forgotten tab.
 	import { Minus, Play, Plus } from '@lucide/svelte';
+	import { loadPlayer } from '#lib/video.ts';
 
 	let { stream, name, idleMinutes = 5 }: { stream: string; name: string; idleMinutes?: number } = $props();
 
 	let host: HTMLDivElement | undefined = $state();
 	let playing = $state(true);
-	let ready = $state(false);
 	let failed = $state(false);
 	let live = $state(false); // picture actually arriving
 	let stalled = $state(false); // nothing after a while
@@ -102,11 +102,6 @@
 		if (v) v.controls = !zoomed;
 	});
 
-	async function loadComponent() {
-		if (customElements.get('video-stream')) return;
-		const url = new URL('/video/video-stream.js', location.origin).href;
-		await import(/* @vite-ignore */ url);
-	}
 
 	$effect(() => {
 		void attempt;
@@ -118,6 +113,7 @@
 		tx = ty = 0;
 		const started = Date.now();
 		// Watch for the first picture; say so if none comes instead of showing a black box.
+		// (Checked often so "Live" shows as soon as the picture does.)
 		const watch = setInterval(() => {
 			const v = el.querySelector('video');
 			if (v && (v.readyState >= 2 || v.poster)) {
@@ -126,18 +122,20 @@
 			} else if (!live && Date.now() - started > STALL_S * 1000) {
 				stalled = true;
 			}
-		}, 1000);
+		}, 300);
 		let player: HTMLElement & { src?: string; mode?: string; background?: boolean } | null = null;
 		let cancelled = false;
-		loadComponent()
+		loadPlayer()
 			.then(() => {
 				if (cancelled) return;
-				player = document.createElement('video-stream') as typeof player;
+				player = document.createElement('hawk-video') as typeof player;
 				player!.mode = 'mse,hls,mjpeg';
+				player!.addEventListener('streamerror', () => {
+					if (!live) stalled = true;
+				});
 				player!.style.cssText = 'display:block;width:100%;height:100%';
 				el.replaceChildren(player!);
 				player!.src = `/video/api/ws?src=${encodeURIComponent(stream)}`;
-				ready = true;
 				failed = false;
 			})
 			.catch(() => (failed = true));
@@ -147,7 +145,6 @@
 			clearTimeout(stop);
 			clearInterval(watch);
 			el.replaceChildren();
-			ready = false;
 		};
 	});
 </script>

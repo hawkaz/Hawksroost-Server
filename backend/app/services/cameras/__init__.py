@@ -93,6 +93,7 @@ class CameraManager:
         with SessionLocal() as db:
             cam = db.get(Camera, cam_id)
             if cam is None or not cam.enabled:
+                await go2rtc.preload(stream_names(cam_id)["sub"], on=False)
                 for name in stream_names(cam_id).values():
                     await go2rtc.remove_stream(name)
                 return
@@ -146,6 +147,10 @@ class CameraManager:
                 registered.append(key)
             elif not src:
                 await go2rtc.remove_stream(name)
+        if "sub" in registered:
+            # Live view opens on the small stream; keeping it connected inside the cabin
+            # network means the picture starts at the camera's next keyframe.
+            await go2rtc.preload(names["sub"])
         caps = {**info["caps"], "streams": registered}
         conn.online = True
         with SessionLocal() as db:

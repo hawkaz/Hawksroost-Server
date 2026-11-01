@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import settings_store, state
+from .. import cache, settings_store, state
 from ..db import get_db
 from ..deps import admin, viewer
 from ..models import StarlinkSample, User
@@ -103,9 +103,17 @@ def obstruction_map(db: Session = Depends(get_db), _: User = Depends(viewer)):
 @router.get("/api/starlink/history")
 def history(hours: int = 24, db: Session = Depends(get_db), _: User = Depends(viewer)):
     hours = max(1, min(hours, 24 * 31))
+    return cache.cached(("starlink_history", hours), 60, lambda: _history(db, hours))
+
+
+def _history(db: Session, hours: int) -> dict:
     bucket_s = 300 if hours <= 24 else 3600 if hours <= 24 * 8 else 6 * 3600
     since = utcnow() - timedelta(hours=hours)
-    rows = db.scalars(select(StarlinkSample).where(StarlinkSample.ts >= since).order_by(StarlinkSample.ts)).all()
+    # Plain column tuples, not ORM objects: a month of one-minute rollups is ~43,000 rows.
+    S = StarlinkSample
+    rows = db.execute(select(
+        S.ts, S.latency_ms, S.power_w, S.drop_rate, S.down_bps, S.up_bps, S.down_peak_bps, S.up_peak_bps,
+        S.outage_s, S.obstructed_s, S.seconds).where(S.ts >= since).order_by(S.ts)).all()
     buckets: dict[int, dict] = {}
     for r in rows:
         k = int(r.ts.replace(tzinfo=UTC).timestamp()) // bucket_s

@@ -21,6 +21,8 @@ def fresh_db():
     Base.metadata.create_all(engine)
     for limiter in _limiters():
         limiter.hits.clear()
+    from app import cache
+    cache.clear()
     yield
 
 

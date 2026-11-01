@@ -84,14 +84,22 @@ def test_capabilities_drive_the_api(client, monkeypatch):
     async def remove_stream(name):
         registered.pop(name, None)
 
+    preloaded = []
+
+    async def preload(name, on=True):
+        preloaded.append((name, on))
+        return True
+
     monkeypatch.setattr(cams.go2rtc, "set_stream", set_stream)
     monkeypatch.setattr(cams.go2rtc, "remove_stream", remove_stream)
+    monkeypatch.setattr(cams.go2rtc, "preload", preload)
     driver = FakeDriver(cam_id, "h", None, "", "", 0, {})
     conn = cams.Conn(cam_id=cam_id, driver=driver)
     asyncio.run(cams.manager._connect(conn))
     cams.manager.conns[cam_id] = conn
     try:
         assert set(registered) == {f"cam{cam_id}_main", f"cam{cam_id}_sub"}
+        assert preloaded == [(f"cam{cam_id}_sub", True)]   # live view's stream kept warm
         out = next(c for c in client.get("/api/cameras").json() if c["id"] == cam_id)
         assert out["online"] and out["model"] == "Acme 1"
         assert out["ptz"] and out["light"] and not out["siren"] and not out["recordings"]

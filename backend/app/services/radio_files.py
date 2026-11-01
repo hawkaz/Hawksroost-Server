@@ -292,10 +292,18 @@ def _process_once() -> list[int]:
 async def run() -> None:
     last_retention = 0.0
     loop = asyncio.get_running_loop()
+    configs_checked = False
     while True:
         try:
             with SessionLocal() as db:
                 on = settings_store.get(db, "radio")["enabled"] and config.RECORDINGS_DIR.exists()
+            if on and not configs_checked:
+                # After an update, rewrite the recorder and Icecast configs from the current code
+                # (only files that actually change are written, so nothing restarts otherwise).
+                from . import radio_config
+                with SessionLocal() as db:
+                    radio_config.apply(db)
+                configs_checked = True
             if on:
                 _expire_tuning()
                 ids = await asyncio.to_thread(_process_once)

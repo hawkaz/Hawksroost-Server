@@ -1,11 +1,17 @@
 /// <reference lib="webworker" />
 // Offline app shell + Web Push. API, video and radio always go to the network.
-import { version } from '$app/environment';
+import { version } from '$app/env';
 import { assets, immutable } from '$app/manifest';
+import { self as sw } from '$app/service-worker';
 
-const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `shell-${version}`;
-const SHELL = [...immutable.map((f) => f.path), ...assets.map((f) => f.path as string), '/200.html'];
+// Fonts come as .woff2 (every current browser) and .woff (old ones). Only the .woff2
+// files are stored ahead of time; an old browser still fetches its .woff when needed.
+const SHELL = [
+	...immutable.map((f) => f.path).filter((p) => !p.endsWith('.woff')),
+	...assets.map((f) => f.path as string),
+	'/200.html'
+];
 
 sw.addEventListener('install', (event) => {
 	event.waitUntil(

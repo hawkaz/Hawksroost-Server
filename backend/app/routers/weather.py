@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import settings_store, state
+from .. import cache, settings_store, state
 from ..db import get_db
 from ..deps import viewer
 from ..models import WeatherEvent, WeatherObs
@@ -182,11 +182,20 @@ def _local_bucket(ts: datetime, size_s: int) -> int:
 
 @router.get("/api/weather/history")
 def weather_history(period: str = Query("day", alias="range"), db: Session = Depends(get_db)):
-    hours, size = RANGES.get(period, RANGES["day"])
+    period = period if period in RANGES else "day"
+    return cache.cached(("weather_history", period), 60, lambda: _weather_history(db, period))
+
+
+def _weather_history(db: Session, period: str) -> dict:
+    hours, size = RANGES[period]
     cfg = settings_store.get(db, "tempest")
     elev = _elevation_m(cfg)
     since = utcnow() - timedelta(hours=hours)
-    rows = db.scalars(select(WeatherObs).where(WeatherObs.ts >= since).order_by(WeatherObs.ts)).all()
+    # Plain column tuples, not ORM objects: a month of one-minute readings is ~43,000 rows.
+    rows = db.execute(select(
+        WeatherObs.ts, WeatherObs.temp_c, WeatherObs.humidity, WeatherObs.pressure_mb, WeatherObs.wind_avg,
+        WeatherObs.wind_dir, WeatherObs.wind_lull, WeatherObs.wind_gust, WeatherObs.rain_mm, WeatherObs.solar,
+        WeatherObs.uv).where(WeatherObs.ts >= since).order_by(WeatherObs.ts)).all()
 
     buckets: dict[int, dict] = {}
     days: dict[str, dict] = {}
@@ -249,7 +258,7 @@ def weather_history(period: str = Query("day", alias="range"), db: Session = Dep
     strikes = db.scalars(select(WeatherEvent).where(WeatherEvent.kind == "strike", WeatherEvent.ts >= since)
                          .order_by(WeatherEvent.ts.desc()).limit(500)).all()
     return {
-        "range": period if period in RANGES else "day", "bucket_s": size, "since": iso(since), "series": series,
+        "range": period, "bucket_s": size, "since": iso(since), "series": series,
         "pressure_kind": "sea level" if elev else "station",
         "days": sorted(days.values(), key=lambda d: d["date"]),
         "wind_rose": {"classes_ms": WIND_CLASSES_MS, "sectors": rose, "calm": calm, "total": total_wind},

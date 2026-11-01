@@ -191,7 +191,10 @@ def render_icecast(db: Session) -> str:
     return f"""<icecast>
   <location>Cabin</location>
   <admin>admin@localhost</admin>
-  <limits><clients>20</clients><sources>8</sources><burst-size>65535</burst-size></limits>
+  <!-- The recorder streams MP3 at about 16 kbit/s (2 KB a second). The burst a new
+       listener gets is what they hear first: 8 KB is ~4 s, enough to start straight
+       away without starting far behind live (Icecast's default 64 KB is ~30 s). -->
+  <limits><clients>20</clients><sources>8</sources><burst-size>8192</burst-size></limits>
   <authentication>
     <source-password>{s.get("source", "")}</source-password>
     <admin-user>admin</admin-user>
