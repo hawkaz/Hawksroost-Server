@@ -15,6 +15,9 @@ def test_member_cannot_admin(client):
     assert client.post("/api/lists/shopping", json={"text": "Eggs"}).status_code == 201
     assert client.get("/api/admin/users").status_code == 403
     assert client.put("/api/cameras/1/autotrack", json={"enabled": True}).status_code == 403
+    assert client.post("/api/cameras/1/siren", json={"on": True}).status_code == 403   # siren is admin-only
+    # The light is a member control: allowed past the role check (camera 1 isn't connected → 503).
+    assert client.post("/api/cameras/1/light", json={"on": True}).status_code == 503
 
 
 def test_settings_secrets_write_only(client):

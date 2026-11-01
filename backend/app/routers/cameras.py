@@ -42,7 +42,7 @@ def _cam_out(cam: Camera, db: Session) -> dict:
         "ptz": bool(caps.get("ptz")), "zoom": bool(caps.get("zoom")),
         "presets": manager.presets(cam.id), "auto_track": manager.auto_track(cam.id),
         "recordings": bool(caps.get("recordings")), "events": bool(caps.get("events")),
-        "siren": bool(caps.get("siren")), "light": bool(caps.get("light")),
+        "siren": bool(caps.get("siren")), "light": bool(caps.get("light")), "light_on": manager.light_on(cam.id),
         "ai_types": caps.get("ai_types", []),
         "last_event": {"type": last.type, "at": iso(last.started_at)} if last else None,
     }
@@ -104,13 +104,16 @@ class OnOffIn(BaseModel):
 
 
 @router.post("/api/cameras/{cam_id}/siren", status_code=204)
-async def siren(cam_id: int, body: OnOffIn, _: User = Depends(camera_control)):
+async def siren(cam_id: int, body: OnOffIn, _: User = Depends(admin)):
     await manager.siren(cam_id, body.on)
 
 
-@router.post("/api/cameras/{cam_id}/light", status_code=204)
+@router.post("/api/cameras/{cam_id}/light")
 async def light(cam_id: int, body: OnOffIn, _: User = Depends(camera_control)):
+    """Turn the light on or off; returns what the camera now reports."""
     await manager.light(cam_id, body.on)
+    state = manager.light_on(cam_id)
+    return {"light_on": body.on if state is None else state}
 
 
 class AutoTrackIn(BaseModel):

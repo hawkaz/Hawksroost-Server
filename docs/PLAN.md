@@ -50,8 +50,8 @@ front door (Caddy + Let's Encrypt + DDNS) works.** The 2026-11-01 redesign
 |---|---|---|---|
 | See everything, watch cameras, listen, download clips | ✓ | ✓ | ✓ |
 | Book the cabin, edit lists, keep radio clips | | ✓ | ✓ |
-| Pan/tilt the camera, go to presets, camera light and siren | | ✓ | ✓ |
-| Auto-tracking, settings, integrations, people, invites, access requests, others' bookings | | | ✓ |
+| Pan/tilt the camera, go to presets, camera light | | ✓ | ✓ |
+| Auto-tracking, siren, settings, integrations, people, invites, access requests, others' bookings | | | ✓ |
 
 **Why D3 changed:** the brief assumed Starlink CGNAT. Chris has Local Priority
 with a public IP, so a direct front door removes the Cloudflare video-policy
@@ -114,7 +114,8 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   existing accounts, and notifies admins. Inviting from a request defaults the
   role to **viewer**; change it in the invite form if they should book or edit.
 - **Camera siren** needs a second tap within 4 seconds; it sounds twice and stops
-  (Reolink's default). Light and siren are member-level, like pan/tilt.
+  (Reolink's default). Siren and auto-tracking are admin-only (Chris,
+  2026-11-01); the light is a member-level on/off switch like pan/tilt.
 - **ONVIF** cameras: main stream = the largest H.264 profile, sub = the smallest.
   Motion/person/vehicle/animal come from the camera's event topics, which vary by
   brand. [VERIFY] with a real ONVIF camera if one is ever added.

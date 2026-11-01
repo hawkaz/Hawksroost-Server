@@ -64,6 +64,9 @@ class FakeDriver(Driver):
     async def light(self, on):
         self.lit = on
 
+    def light_on(self):
+        return getattr(self, "lit", False)
+
 
 def test_capabilities_drive_the_api(client, monkeypatch):
     login(client, "admin")
@@ -95,8 +98,9 @@ def test_capabilities_drive_the_api(client, monkeypatch):
         assert out["presets"] == [{"id": "home", "name": "Home"}]
         assert set(out["streams"]) == {"main", "sub"}
         # Supported → done; unsupported → a plain 400.
-        assert client.post(f"/api/cameras/{cam_id}/light", json={"on": True}).status_code == 204
-        assert driver.lit is True
+        assert out["light_on"] is False
+        r = client.post(f"/api/cameras/{cam_id}/light", json={"on": True})
+        assert r.status_code == 200 and r.json() == {"light_on": True} and driver.lit is True
         r = client.post(f"/api/cameras/{cam_id}/siren", json={"on": True})
         assert r.status_code == 400 and "can't" in r.json()["detail"]
         # Bad PTZ command is rejected before it reaches the driver.

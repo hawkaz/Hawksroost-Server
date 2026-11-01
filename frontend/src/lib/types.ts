@@ -80,6 +80,7 @@ export interface CameraInfo {
 	events: boolean;
 	siren: boolean;
 	light: boolean;
+	light_on: boolean | null;
 	ai_types: string[];
 	last_event: { type: string; at: string } | null;
 }

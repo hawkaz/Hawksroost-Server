@@ -24,8 +24,8 @@
 
 	const ROLES = [
 		['viewer', 'Viewer — can look at everything, can’t change anything'],
-		['member', 'Member — can book, edit lists, move cameras'],
-		['admin', 'Admin — everything, including settings and people']
+		['member', 'Member — can book, edit lists, move cameras, turn the camera light on and off'],
+		['admin', 'Admin — everything, including auto-tracking, the siren, settings and people']
 	];
 
 	async function load() {

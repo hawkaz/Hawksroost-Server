@@ -25,8 +25,8 @@ ROLE_RANK = {"viewer": 0, "member": 1, "admin": 2}
 PERMISSIONS = {
     "view": "viewer",            # see everything, listen, watch, download
     "edit": "member",            # bookings, lists, keep radio clips
-    "camera_control": "member",  # pan/tilt, presets
-    "admin": "admin",            # settings, users, invites, auto-track
+    "camera_control": "member",  # pan/tilt, presets, camera light
+    "admin": "admin",            # settings, users, invites, auto-track, siren
 }
 
 

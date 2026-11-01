@@ -269,6 +269,9 @@ class CameraManager:
     def presets(self, cam_id: int) -> list[dict]:
         return self.conns[cam_id].driver.presets() if self.online(cam_id) else []
 
+    def light_on(self, cam_id: int) -> bool | None:
+        return self.conns[cam_id].driver.light_on() if self.online(cam_id) else None
+
     def auto_track(self, cam_id: int) -> bool | None:
         return self.conns[cam_id].driver.auto_track() if self.online(cam_id) else None
 

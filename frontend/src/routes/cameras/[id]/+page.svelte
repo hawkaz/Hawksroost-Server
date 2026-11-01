@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import {
-		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Camera, Download, Lightbulb, LightbulbOff, Play, Scissors,
-		Siren, ZoomIn, ZoomOut
+		ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Camera, Download, Play, Scissors, Siren, ZoomIn, ZoomOut
 	} from '@lucide/svelte';
 	import { api, qs } from '#lib/api.ts';
 	import LivePlayer from '#lib/components/LivePlayer.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
+	import Switch from '#lib/components/Switch.svelte';
 	import { ago, cabinToday, dayTime, duration } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
@@ -81,13 +81,21 @@
 			toast.error(e);
 		}
 	}
+	let switching = $state(false);
 	async function setTrack(enabled: boolean) {
+		if (!cam) return;
+		const was = cam.auto_track;
+		cam.auto_track = enabled; // show it straight away; put it back if the camera says no
+		switching = true;
 		try {
 			const r = await api.put<{ auto_track: boolean }>(`/api/cameras/${id}/autotrack`, { enabled });
-			if (cam) cam.auto_track = r.auto_track;
+			cam.auto_track = r.auto_track;
 			toast.show(`Auto-tracking ${enabled ? 'on' : 'off'}.`);
 		} catch (e) {
+			cam.auto_track = was;
 			toast.error(e);
+		} finally {
+			switching = false;
 		}
 	}
 	// Siren: first tap arms it, second tap within a few seconds sounds it.
@@ -110,11 +118,19 @@
 		}
 	}
 	async function light(on: boolean) {
+		if (!cam) return;
+		const was = cam.light_on;
+		cam.light_on = on;
+		switching = true;
 		try {
-			await api.post(`/api/cameras/${id}/light`, { on });
-			toast.show(`Light ${on ? 'on' : 'off'}.`);
+			const r = await api.post<{ light_on: boolean }>(`/api/cameras/${id}/light`, { on });
+			cam.light_on = r.light_on;
+			toast.show(`Light ${r.light_on ? 'on' : 'off'}.`);
 		} catch (e) {
+			cam.light_on = was;
 			toast.error(e);
+		} finally {
+			switching = false;
 		}
 	}
 	$effect(() => () => clearTimeout(sirenTimer));
@@ -135,7 +151,11 @@
 		...(cam?.events ? [{ id: 'events', label: 'Motion' }] : [])
 	] as { id: typeof tab; label: string }[]);
 	const canMove = $derived(!!cam?.online && !!cam.ptz && session.can('camera_control'));
-	const hasExtras = $derived(!!cam?.online && (cam.siren || cam.light) && session.can('camera_control'));
+	// Light: members and up. Auto-tracking and siren: admins only.
+	const showLight = $derived(!!cam?.online && cam.light && session.can('camera_control'));
+	const showTrack = $derived(!!cam?.online && cam.auto_track !== null && session.can('admin'));
+	const showSiren = $derived(!!cam?.online && cam.siren && session.can('admin'));
+	const hasExtras = $derived(showLight || showTrack || showSiren);
 	const PAD = [
 		{ cmd: 'Up', Icon: ArrowUp, cls: 'up' },
 		{ cmd: 'Left', Icon: ArrowLeft, cls: 'left' },
@@ -221,7 +241,7 @@
 		{#if !cam.online}
 			<p class="notice warn">{cam.name} camera is offline{cam.last_ok_at ? ` since ${dayTime(cam.last_ok_at)}` : ''}.</p>
 		{:else}
-			<div class="live" class:solo={!canMove && !hasExtras && cam.auto_track === null}>
+			<div class="live" class:solo={!canMove && !hasExtras}>
 				<div class="stack">
 					{#if streamName}
 						{#key streamName}<LivePlayer stream={streamName} name={`${cam.name} · ${LENS[lens]}`} />{/key}
@@ -276,32 +296,28 @@
 						</section>
 					{/if}
 
-					{#if cam.auto_track !== null}
-						<section class="card spread">
-							<div><h2 class="h3">Auto-tracking</h2><div class="small muted">The camera follows people, vehicles and animals on its own.</div></div>
-							{#if session.can('admin')}
-								<input type="checkbox" checked={cam.auto_track} onchange={(e) => setTrack((e.target as HTMLInputElement).checked)} aria-label="Auto-tracking" />
-							{:else}
-								<span class="chip">{cam.auto_track ? 'On' : 'Off'}</span>
-							{/if}
-						</section>
-					{/if}
-
 					{#if hasExtras}
-						<section class="card">
-							<h2 class="h3">Light and siren</h2>
-							<div class="row wrap extras">
-								{#if cam.light}
-									<button class="btn secondary" onclick={() => light(true)}><Lightbulb size={18} strokeWidth={1.75} />Light on</button>
-									<button class="btn secondary" onclick={() => light(false)}><LightbulbOff size={18} strokeWidth={1.75} />Light off</button>
-								{/if}
-								{#if cam.siren}
+						<section class="card toggles">
+							{#if showLight}
+								<div class="toggle">
+									<div class="grow"><h2 class="h3">Light</h2><div class="small muted">{cam.light_on ? 'On' : 'Off'}</div></div>
+									<Switch checked={!!cam.light_on} label="Camera light" disabled={switching} onchange={light} />
+								</div>
+							{/if}
+							{#if showTrack}
+								<div class="toggle">
+									<div class="grow"><h2 class="h3">Auto-tracking</h2><div class="small muted">Follows people, vehicles and animals on its own.</div></div>
+									<Switch checked={!!cam.auto_track} label="Auto-tracking" disabled={switching} onchange={setTrack} />
+								</div>
+							{/if}
+							{#if showSiren}
+								<div class="toggle siren-row">
+									<div class="grow"><h2 class="h3">Siren</h2><div class="small muted">Loud. Anyone near the camera will hear it.</div></div>
 									<button class="btn" class:danger={sirenArmed} class:secondary={!sirenArmed} onclick={siren} aria-live="polite">
-										<Siren size={18} strokeWidth={1.75} />{sirenArmed ? 'Tap again to sound' : 'Siren'}
+										<Siren size={18} strokeWidth={1.75} />{sirenArmed ? 'Tap again' : 'Sound'}
 									</button>
-								{/if}
-							</div>
-							{#if cam.siren}<p class="small muted hint">The siren is loud. Anyone near the camera will hear it.</p>{/if}
+								</div>
+							{/if}
 						</section>
 					{/if}
 				</div>
@@ -454,8 +470,26 @@
 		margin-top: var(--space-3);
 		text-align: center;
 	}
-	.extras .btn {
-		flex: 1 1 auto;
+	.toggles {
+		display: flex;
+		flex-direction: column;
+	}
+	.toggle {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3) 0;
+		border-top: 1px solid var(--line);
+	}
+	.toggle:first-child {
+		border-top: 0;
+		padding-top: 0;
+	}
+	.toggle:last-child {
+		padding-bottom: 0;
+	}
+	.toggle .h3 {
+		margin: 0;
 	}
 	.ptz-wrap {
 		display: flex;

@@ -90,6 +90,10 @@ class Driver:
     def auto_track(self) -> bool | None:
         return None
 
+    def light_on(self) -> bool | None:
+        """Whether the camera's light is on now; None when it has no light."""
+        return None
+
     async def ptz(self, command: str, speed: int | None = None) -> None:
         raise NotSupported()
 
@@ -196,6 +200,11 @@ class ReolinkDriver(Driver):
     async def refresh(self) -> None:
         if self.h.supported(self.channel, "ptz_preset_basic") or self.h.supported(self.channel, "ptz_presets"):
             await self.h.get_state(cmd="GetPtzPreset")
+        if self.h.supported(self.channel, "floodLight"):
+            await self.h.get_state(cmd="GetWhiteLed")
+
+    def light_on(self) -> bool | None:
+        return self.h.whiteled_state(self.channel) if self.h.supported(self.channel, "floodLight") else None
 
     def auto_track(self) -> bool | None:
         return self.h.auto_track_enabled(self.channel) if self.h.supported(self.channel, "auto_track") else None

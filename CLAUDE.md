@@ -68,7 +68,7 @@ bash /opt/hawksroost/scripts/update.sh
 
 **Roles** (defined once in `backend/app/security.py` → `PERMISSIONS`):
 viewer = see/listen/watch/download; member = also book, edit lists, keep radio
-clips, pan/tilt/presets, camera light and siren; admin = also auto-track,
+clips, pan/tilt/presets, camera light; admin = also auto-track, siren,
 settings, integrations, people, invites, access requests, anyone's bookings. Check permissions with `deps.viewer /
 member / camera_control / admin` on the API and `session.can(...)` in the UI.
 
