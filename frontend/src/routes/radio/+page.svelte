@@ -407,9 +407,6 @@
 </div>
 
 <style>
-	.h3 {
-		font: 600 17px/24px var(--font-display);
-	}
 	/* Phones and tablets: what's on now, the calls, then tuning. Wide screens: calls on
 	   the left; listening and tuning in a column beside them. */
 	.layout {

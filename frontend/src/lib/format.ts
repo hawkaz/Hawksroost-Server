@@ -43,7 +43,7 @@ export function dateRange(start: string, end: string): string {
 	return sameMonth ? `${m(a)} ${a.getDate()}–${b.getDate()}` : `${m(a)} ${a.getDate()} – ${m(b)} ${b.getDate()}`;
 }
 
-export function nights(start: string, end: string): number {
+function nights(start: string, end: string): number {
 	return Math.round((parseDate(end).getTime() - parseDate(start).getTime()) / 86400000);
 }
 

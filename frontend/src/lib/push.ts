@@ -42,7 +42,7 @@ function deviceLabel(): string {
 	return 'Browser';
 }
 
-export async function currentSubscription(): Promise<PushSubscription | null> {
+async function currentSubscription(): Promise<PushSubscription | null> {
 	if (!pushSupported()) return null;
 	const reg = await navigator.serviceWorker.getRegistration();
 	return reg ? reg.pushManager.getSubscription() : null;

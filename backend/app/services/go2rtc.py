@@ -47,11 +47,3 @@ async def remove_stream(name: str) -> None:
     except httpx.HTTPError:
         pass
 
-
-async def list_streams() -> dict:
-    try:
-        async with httpx.AsyncClient(timeout=5) as c:
-            r = await c.get(f"{config.GO2RTC_URL}/api/streams")
-            return r.json() if r.status_code == 200 else {}
-    except (httpx.HTTPError, ValueError):
-        return {}

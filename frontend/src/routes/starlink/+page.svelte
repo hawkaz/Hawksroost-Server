@@ -395,9 +395,6 @@
 	.ch h3 {
 		font: 600 17px/24px var(--font-display);
 	}
-	.h3 {
-		font: 600 17px/24px var(--font-display);
-	}
 	.head {
 		margin-bottom: var(--space-3);
 	}

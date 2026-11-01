@@ -500,7 +500,6 @@
 		}
 	}
 	.h3 {
-		font: 600 17px/24px var(--font-display);
 		margin: 0 0 var(--space-3);
 	}
 	.sub {
