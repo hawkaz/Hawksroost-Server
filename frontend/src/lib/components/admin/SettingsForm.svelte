@@ -20,9 +20,21 @@
 		title,
 		fields,
 		values = $bindable(),
+		columns = false,
 		intro,
 		actions
-	}: { section: string; title: string; fields: Field[]; values: Record<string, unknown>; intro?: Snippet; actions?: Snippet } = $props();
+	}: {
+		section: string;
+		title: string;
+		fields: Field[];
+		values: Record<string, unknown>;
+		/** Lay short fields out side by side on wide screens. */
+		columns?: boolean;
+		intro?: Snippet;
+		actions?: Snippet;
+	} = $props();
+	const toggles = $derived(fields.filter((f) => f.type === 'checkbox'));
+	const inputs = $derived(fields.filter((f) => f.type !== 'checkbox'));
 
 	let draft = $state<Record<string, unknown>>({});
 	let busy = $state(false);
@@ -57,10 +69,12 @@
 	<form class="stack" onsubmit={save}>
 		<h2>{title}</h2>
 		{@render intro?.()}
-		{#each fields as f (f.key)}
-			{#if f.type === 'checkbox'}
-				<label class="spread" style="min-height:44px"><span>{f.label}</span><input type="checkbox" bind:checked={draft[f.key] as boolean} /></label>
-			{:else if f.type === 'select'}
+		{#each toggles as f (f.key)}
+			<label class="spread" style="min-height:44px"><span>{f.label}</span><input type="checkbox" bind:checked={draft[f.key] as boolean} /></label>
+		{/each}
+		<div class="inputs" class:columns>
+		{#each inputs as f (f.key)}
+			{#if f.type === 'select'}
 				<label class="field"><span>{f.label}</span><select bind:value={draft[f.key]}>{#each f.options ?? [] as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
 			{:else}
 				<label class="field">
@@ -75,9 +89,23 @@
 				</label>
 			{/if}
 		{/each}
+		</div>
 		<div class="row wrap">
 			<button class="btn" disabled={busy}>Save</button>
 			{@render actions?.()}
 		</div>
 	</form>
 </section>
+
+<style>
+	.inputs {
+		display: grid;
+		gap: var(--space-4);
+	}
+	@media (min-width: 900px) {
+		.inputs.columns {
+			grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+			align-items: start;
+		}
+	}
+</style>

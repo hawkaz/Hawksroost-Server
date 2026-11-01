@@ -9,7 +9,7 @@
 </script>
 
 <header class="head">
-	{#if title}<a href="/admin" class="small muted">← Admin</a>{/if}
+	{#if title}<a href="/admin" class="small muted back">← Admin</a>{/if}
 	<h1>{title ?? 'Admin'}</h1>
 </header>
 {#if !session.can('admin')}
@@ -26,6 +26,13 @@
 	.head {
 		display: flex;
 		flex-direction: column;
+		align-items: flex-start;
+	}
+	.back {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap);
+		margin: calc(-1 * var(--space-3)) 0 calc(-1 * var(--space-1));
 	}
 	.subnav {
 		display: none;

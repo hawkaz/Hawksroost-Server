@@ -52,6 +52,12 @@
 	const starlinkFresh = $derived(!!sl && !sl.error && Date.now() - new Date(sl.updated_at).getTime() < 300000);
 	const starlinkOk = $derived(starlinkFresh && sl?.state === 'CONNECTED');
 	const shownCams = $derived(data?.cameras.slice(0, 4) ?? []);
+	// Tasks by list, in the order they come; the list names only show when there's more than one.
+	const taskGroups = $derived.by(() => {
+		const m = new Map<string, NonNullable<typeof data>['tasks']>();
+		for (const t of data?.tasks ?? []) m.set(t.list, [...(m.get(t.list) ?? []), t]);
+		return [...m.entries()];
+	});
 </script>
 
 <div class="stack">
@@ -59,133 +65,211 @@
 	{#if error}<p class="notice danger">{error}</p>{/if}
 
 	{#if data}
-		<div class="grid grid-2">
-			<section class="card">
-				<div class="card-head"><h2>At the cabin</h2><a class="btn text" href="/calendar">Calendar</a></div>
-				{#if data.at_cabin.length}
-					<ul class="list">
-						{#each data.at_cabin as b (b.id)}
-							<li><Avatar person={b.people[0] ?? b.user} /><div class="grow"><div>{b.who} · {b.title}</div><div class="small muted data">{dateRange(b.start_date, b.end_date)}</div></div></li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="muted">Nobody's booked in tonight.</p>
-				{/if}
-				{#if data.next.length}
-					<h3 class="sub">Coming up</h3>
-					<ul class="list">
-						{#each data.next as b (b.id)}
-							<li>
-								<Avatar person={b.people[0] ?? b.user} />
-								<div class="grow">
-									<div>{b.kind === 'stay' ? `${b.who} · ${b.title}` : b.title}</div>
-									<div class="small muted data">{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nightsText(b.start_date, b.end_date)}` : ''}</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-
-			<a class="card weather" href="/weather">
-				<div class="card-head"><h2>Weather</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
-				{#if w}
-					<div class="row">
-						{#if wc}<WeatherIcon icon={wc.icon} label={wc.label} size={44} />{/if}
-						<span class="big">{temp(w.temp_c as number, u)}</span>
-						<div class="data small">
-							{#if wc?.label}<div class="cond-label">{wc.label}</div>{/if}
-							<div>Wind {wind(w.wind_avg as number, u)} {compass(w.wind_dir as number)}, gusts {wind(w.wind_gust as number, u)}</div>
-							<div>Humidity {Math.round(w.humidity as number)}%</div>
-							<div class="muted">Updated {ago(w.ts as string)}</div>
-						</div>
-					</div>
-				{:else}
-					<p class="muted">No weather yet. An admin can check Admin → Weather.</p>
-				{/if}
-			</a>
-
-			{#if shownCams.length}
-				<a class="card cam" href={shownCams.length === 1 ? `/cameras/${shownCams[0].id}` : '/cameras'}>
-					<div class="card-head"><h2>Cameras</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
-					<div class="cams" class:multi={shownCams.length > 1}>
-						{#each shownCams as c (c.id)}<CameraThumb id={c.id} name={c.name} every={shownCams.length > 1 ? 60 : 30} />{/each}
-					</div>
-				</a>
-			{/if}
-
-			<section class="card">
-				<div class="card-head"><h2>Shopping <span class="count data">{data.shopping_count} to get</span></h2><a class="btn text" href="/shopping">Open</a></div>
-				{#if data.shopping.length}
-					<ul class="list">
-						{#each data.shopping as i (i.id)}
-							<li>
-								<div class="grow"><div>{i.text}</div>{#if i.store}<div class="small muted">{i.store}</div>{/if}</div>
-								{#if i.qty}<span class="data">{i.qty}</span>{/if}
-							</li>
-						{/each}
-					</ul>
-					{#if data.shopping_count > data.shopping.length}<a class="small muted more-link" href="/shopping">and {data.shopping_count - data.shopping.length} more</a>{/if}
-				{:else}
-					<p class="muted">Nothing on the list.</p>
-				{/if}
-			</section>
-
-			<section class="card">
-				<div class="card-head"><h2>Lists <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists">Open</a></div>
-				{#if data.tasks.length}
-					<ul class="list">
-						{#each data.tasks as t (t.id)}
-							<li>
-								<div class="grow">
-									<div>{t.title}{#if t.priority === 2}<span class="chip warn" style="margin-left:8px">High</span>{/if}</div>
-									<div class="small muted">{t.list}{t.assignee ? ` · ${t.assignee.name}` : ''}</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="muted">Nothing to do. Go sit on the porch.</p>
-				{/if}
-			</section>
-
-			{#if sl}
-				<a class="card" href="/starlink">
-					<div class="card-head"><h2>Starlink</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
-					<div class="row link-state">
-						<span class="dot" class:ok={starlinkOk} class:warn={starlinkFresh && !starlinkOk} class:bad={!starlinkFresh}></span>
-						{#if starlinkOk}
-							<span>Online · <span class="data">{Math.round(sl.latency_ms ?? 0)} ms</span> latency</span>
-						{:else if starlinkFresh}
-							<span>Not connected right now</span>
-						{:else}
-							<span>Can’t reach the dish · last heard {ago(sl.updated_at)}</span>
-						{/if}
-					</div>
-				</a>
-			{/if}
-
-			{#if radio?.enabled}
-				<a class="card" href="/radio">
-					<div class="card-head"><h2>Radio</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
-					{#if radio.incidents.length}
-						<p><span class="chip live pulse">Busy</span> {radio.incidents.map((i) => i.label).join(', ')}</p>
-					{:else if radio.active.length}
-						<p><span class="chip live pulse">Live</span> {radio.active[0].label} is active.</p>
+		<!-- Phones: one column in this order. Wider: two columns that don't stretch to match. -->
+		<div class="today">
+			<div class="col">
+				<section class="card at-cabin">
+					<div class="card-head"><h2>At the cabin</h2><a class="btn text" href="/calendar">Calendar</a></div>
+					{#if data.at_cabin.length}
+						<ul class="list tight">
+							{#each data.at_cabin as b (b.id)}
+								<li><Avatar person={b.people[0] ?? b.user} /><div class="grow"><div>{b.who} · {b.title}</div><div class="small muted data">{dateRange(b.start_date, b.end_date)}</div></div></li>
+							{/each}
+						</ul>
 					{:else}
-						<p class="muted">Scanner is quiet.</p>
+						<p class="muted">Nobody's booked in tonight.</p>
+					{/if}
+					{#if data.next.length}
+						<h3 class="sub">Coming up</h3>
+						<ul class="list tight">
+							{#each data.next as b (b.id)}
+								<li>
+									<Avatar person={b.people[0] ?? b.user} />
+									<div class="grow">
+										<div>{b.kind === 'stay' ? `${b.who} · ${b.title}` : b.title}</div>
+										<div class="small muted data">{dateRange(b.start_date, b.end_date)}{b.kind === 'stay' ? ` · ${nightsText(b.start_date, b.end_date)}` : ''}</div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+
+				{#if shownCams.length}
+					<a class="card cam" href={shownCams.length === 1 ? `/cameras/${shownCams[0].id}` : '/cameras'}>
+						<div class="card-head"><h2>Cameras</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
+						<div class="cams" class:multi={shownCams.length > 1}>
+							{#each shownCams as c (c.id)}<CameraThumb id={c.id} name={c.name} every={shownCams.length > 1 ? 60 : 30} />{/each}
+						</div>
+					</a>
+				{/if}
+
+
+				{#if sl || radio?.enabled}
+					<section class="card status">
+						<h2 class="sr-only">Starlink{radio?.enabled ? ' and radio' : ''}</h2>
+						{#if sl}
+							<a class="status-row" href="/starlink">
+								<span class="dot" class:ok={starlinkOk} class:warn={starlinkFresh && !starlinkOk} class:bad={!starlinkFresh}></span>
+								<span class="grow">
+									<strong>Starlink</strong>
+									<span class="small muted">
+										{#if starlinkOk}Online · <span class="data">{Math.round(sl.latency_ms ?? 0)} ms</span>
+										{:else if starlinkFresh}Not connected right now
+										{:else}Can’t reach the dish · last heard {ago(sl.updated_at)}{/if}
+									</span>
+								</span>
+								<ChevronRight size={20} strokeWidth={1.75} />
+							</a>
+						{/if}
+						{#if radio?.enabled}
+							<a class="status-row" href="/radio">
+								<span class="dot" class:live={!!(radio.incidents.length || radio.active.length)}></span>
+								<span class="grow">
+									<strong>Radio</strong>
+									<span class="small muted">
+										{#if radio.incidents.length}Busy: {radio.incidents.map((i) => i.label).join(', ')}
+										{:else if radio.active.length}{radio.active[0].label} is talking
+										{:else}Scanner is quiet{/if}
+									</span>
+								</span>
+								<ChevronRight size={20} strokeWidth={1.75} />
+							</a>
+						{/if}
+					</section>
+				{/if}
+			</div>
+
+			<div class="col">
+				<a class="card weather" href="/weather">
+					<div class="card-head"><h2>Weather</h2><ChevronRight size={20} strokeWidth={1.75} /></div>
+					{#if w}
+						<div class="row">
+							{#if wc}<WeatherIcon icon={wc.icon} label={wc.label} size={44} />{/if}
+							<span class="big">{temp(w.temp_c as number, u)}</span>
+							<div class="data small">
+								{#if wc?.label}<div class="cond-label">{wc.label}</div>{/if}
+								<div>Wind {wind(w.wind_avg as number, u)} {compass(w.wind_dir as number)}, gusts {wind(w.wind_gust as number, u)}</div>
+								<div>Humidity {Math.round(w.humidity as number)}%</div>
+								<div class="muted">Updated {ago(w.ts as string)}</div>
+							</div>
+						</div>
+					{:else}
+						<p class="muted">No weather yet. An admin can check Admin → Weather.</p>
 					{/if}
 				</a>
-			{/if}
+
+				<section class="card shopping">
+					<div class="card-head"><h2>Shopping <span class="count data">{data.shopping_count} to get</span></h2><a class="btn text" href="/shopping">Open</a></div>
+					{#if data.shopping.length}
+						<ul class="list tight">
+							{#each data.shopping as i (i.id)}
+								<li>
+									<div class="grow">{i.text}{#if i.store}<span class="small muted">{` · ${i.store}`}</span>{/if}</div>
+									{#if i.qty}<span class="data small">{i.qty}</span>{/if}
+								</li>
+							{/each}
+						</ul>
+						{#if data.shopping_count > data.shopping.length}<a class="small muted more-link" href="/shopping">and {data.shopping_count - data.shopping.length} more</a>{/if}
+					{:else}
+						<p class="muted">Nothing on the list.</p>
+					{/if}
+				</section>
+
+
+				<section class="card tasks">
+					<div class="card-head"><h2>Lists <span class="count data">{data.task_count} open</span></h2><a class="btn text" href="/lists">Open</a></div>
+					{#if data.tasks.length}
+						{#each taskGroups as [list, tasks] (list)}
+							{#if taskGroups.length > 1}<h3 class="sub">{list}</h3>{/if}
+							<ul class="list tight">
+								{#each tasks as t (t.id)}
+									<li>
+										<div class="grow">{t.title}{#if t.priority === 2}<span class="chip warn" style="margin-left:8px">High</span>{/if}</div>
+										{#if t.assignee}<span class="small muted">{t.assignee.name}</span>{/if}
+									</li>
+								{/each}
+							</ul>
+						{/each}
+					{:else}
+						<p class="muted">Nothing to do. Go sit on the porch.</p>
+					{/if}
+				</section>
+			</div>
 		</div>
 	{/if}
 </div>
 
 <style>
+	.today,
+	.col {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+	.col {
+		display: contents;
+	}
+	.at-cabin {
+		order: 1;
+	}
+	.weather {
+		order: 2;
+	}
+	.cam {
+		order: 3;
+	}
+	.shopping {
+		order: 4;
+	}
+	.tasks {
+		order: 5;
+	}
+	.status {
+		order: 6;
+	}
+	@media (min-width: 700px) {
+		.today {
+			display: grid;
+			grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+			align-items: start;
+		}
+		.col {
+			display: flex;
+		}
+	}
 	a.card {
 		text-decoration: none;
 		color: inherit;
 		display: block;
+	}
+	/* Today only shows things: rows can be tighter than the tap-sized rows on the full pages. */
+	.list.tight > li {
+		min-height: 0;
+		padding: var(--space-2) 0;
+	}
+	.status {
+		padding-top: var(--space-2);
+		padding-bottom: var(--space-2);
+	}
+	.status-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		min-height: 56px;
+		color: inherit;
+		text-decoration: none;
+	}
+	.status-row + .status-row {
+		border-top: 1px solid var(--line);
+	}
+	.status-row .grow {
+		display: flex;
+		flex-direction: column;
+	}
+	.dot.live {
+		background: var(--danger);
+		animation: pulse 1.6s ease-in-out infinite;
 	}
 	.big {
 		font: 400 48px/52px var(--font-data);
@@ -215,9 +299,6 @@
 	}
 	.cams.multi {
 		grid-template-columns: 1fr 1fr;
-	}
-	.link-state {
-		gap: var(--space-2);
 	}
 	.dot {
 		flex: none;

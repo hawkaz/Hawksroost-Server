@@ -222,6 +222,7 @@ a {
 	justify-content: center;
 	gap: var(--space-2);
 	min-height: var(--tap);
+	min-width: var(--tap);
 	padding: 0 var(--space-4);
 	border-radius: var(--radius-md);
 	border: 1px solid transparent;
@@ -309,6 +310,11 @@ button:focus-visible,
 a:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
+}
+/* A checkbox row: the whole row is the tap target. */
+label.spread {
+	min-height: var(--tap);
+	cursor: pointer;
 }
 input[type='checkbox'] {
 	width: 22px;

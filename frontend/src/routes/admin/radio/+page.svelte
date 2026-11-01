@@ -2,6 +2,7 @@
 	import { Plus } from '@lucide/svelte';
 	import { api } from '#lib/api.ts';
 	import AdminNav from '#lib/components/admin/AdminNav.svelte';
+	import Switch from '#lib/components/Switch.svelte';
 	import SettingsForm, { type Field } from '#lib/components/admin/SettingsForm.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import { session } from '#lib/session.svelte.ts';
@@ -128,12 +129,18 @@
 		{ key: 'incident_cooldown_min', label: 'Busy ends after this many quiet minutes', type: 'number' }
 	];
 	const devName = (id: number | null) => devices.find((d) => d.id === id)?.name ?? 'No dongle';
+	// Channels by group, groups in the order they first appear.
+	const byGroup = $derived.by(() => {
+		const m = new Map<string, Channel[]>();
+		for (const c of channels) m.set(c.group, [...(m.get(c.group) ?? []), c]);
+		return [...m.entries()];
+	});
 </script>
 
 <div class="stack">
 	<AdminNav title="Radio" />
 	{#if settings}
-		<SettingsForm section="radio" title="Radio scanner" fields={F} bind:values={settings}>
+		<SettingsForm section="radio" title="Radio scanner" fields={F} columns bind:values={settings}>
 			{#snippet intro()}<p class="small muted">The recorder also has to be started on the server (see the deploy guide, “Radio”). After changing dongles or channels, press <strong>Apply</strong> below.</p>{/snippet}
 		</SettingsForm>
 
@@ -165,20 +172,23 @@
 					<button class="btn secondary" onclick={() => editChannel()}><Plus size={18} strokeWidth={1.75} />Add</button>
 				</div>
 			</div>
-			{#if channels.length}
-				<ul class="list">
-					{#each channels as c (c.id)}
+			{#each byGroup as [g, list] (g)}
+				<h3 class="group">{g} <span class="small muted">{list.filter((c) => c.enabled).length} of {list.length} on</span></h3>
+				<ul class="list chans">
+					{#each list as c (c.id)}
 						<li>
-							<input type="checkbox" checked={c.enabled} aria-label={`${c.label} on`} onchange={(e) => quickToggle(c, (e.target as HTMLInputElement).checked)} />
+							<Switch checked={c.enabled} label={`${c.label} on`} onchange={(on) => quickToggle(c, on)} />
 							<div class="grow">
-								<div>{c.label}{#if c.incident}<span class="chip warn" style="margin-left:8px">Alerts</span>{/if}</div>
-								<div class="small muted"><span class="data">{c.freq_mhz.toFixed(4)}</span>{c.ctcss ? ` · tone ${c.ctcss}` : ''} · {c.modulation.toUpperCase()} · {c.group} · {devName(c.device_id)}</div>
+								<div class="name">{c.label}{#if c.incident}<span class="chip warn" style="margin-left:8px">Alerts</span>{/if}</div>
+								<div class="small muted">
+									<span class="data">{c.freq_mhz.toFixed(4)}</span>{c.ctcss ? ` · tone ${c.ctcss}` : ''}{c.modulation === 'am' ? ' · AM' : ''}{devices.length > 1 ? ` · ${devName(c.device_id)}` : ''}
+								</div>
 							</div>
 							<button class="btn text" onclick={() => editChannel(c)}>Edit</button>
 						</li>
 					{/each}
 				</ul>
-			{/if}
+			{/each}
 			<p class="small muted" style="margin-top:12px">The Mormon Lake list was researched from RadioReference, the Forest Service communications guide and a local Broadcastify feed (sources in docs/RADIO.md). Twelve core channels start on. Sheriff channels may have gone digital: if they sound like data noise, turn them off.</p>
 		</section>
 
@@ -234,3 +244,32 @@
 		</div>
 	</form>
 </Sheet>
+
+<style>
+	.group {
+		font: 600 16px/22px var(--font-display);
+		margin: var(--space-4) 0 var(--space-1);
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+	}
+	.chans .grow {
+		min-width: 0;
+	}
+	.chans .name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	/* Wide screens: two columns of channels. */
+	@media (min-width: 1100px) {
+		.chans {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			column-gap: var(--space-6);
+		}
+		.chans > li:nth-child(2) {
+			border-top: 0;
+		}
+	}
+</style>

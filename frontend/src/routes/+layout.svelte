@@ -201,7 +201,11 @@
 		color: var(--cream);
 	}
 	.home {
-		display: flex;
+		display: grid;
+		place-items: center;
+		min-width: var(--tap);
+		min-height: var(--tap);
+		margin-left: -7px;
 	}
 	.topbar .title {
 		flex: 1;
@@ -297,6 +301,8 @@
 			text-decoration: none;
 			display: flex;
 			justify-content: center;
+			align-items: center;
+			min-height: var(--tap);
 		}
 		.brand .full {
 			display: none;
