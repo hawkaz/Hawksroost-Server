@@ -50,6 +50,26 @@ def test_bad_key_reads_plainly(client):
         mailer.TRANSPORT = None
 
 
+def test_blocked_ip_reads_plainly_and_shows_on_health(client):
+    brevo(401, {"code": "unauthorized", "message": "We have detected you are using an unrecognised IP address "
+                "9.170.116.246. If you performed this action make sure to add the new IP address in this link: "
+                "https://app.brevo.com/security/authorised_ips"})
+    try:
+        setup_email(client)
+        r = client.post("/api/admin/settings/email/test", json={"to": "chris@example.com"})
+        detail = r.json()["detail"]
+        assert r.status_code == 400 and "blocked the cabin's internet address (9.170.116.246)" in detail
+        assert "API key" not in detail
+        item = next(i for i in client.get("/api/admin/health").json()["items"] if i["name"] == "Email")
+        assert item["ok"] is False and "Authorised IPs" in item["detail"]
+        brevo()   # allowed in Brevo; the next send works and health clears
+        assert client.post("/api/admin/settings/email/test", json={"to": "chris@example.com"}).status_code == 200
+        item = next(i for i in client.get("/api/admin/health").json()["items"] if i["name"] == "Email")
+        assert item["ok"] is True
+    finally:
+        mailer.TRANSPORT = None
+
+
 def test_not_set_up(client):
     login(client, "admin")
     r = client.post("/api/admin/settings/email/test", json={"to": "chris@example.com"})

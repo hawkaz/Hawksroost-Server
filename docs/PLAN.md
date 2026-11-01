@@ -204,3 +204,8 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
   auto-tracking are admin-only. Email switched from SMTP to Brevo's API
   (API key + send-from address only), checked against Brevo's OpenAPI spec;
   invites still work (link shown) if an email fails. 48 tests pass.
+- 2026-11-01 — Brevo refused the first test: "unrecognised IP address"
+  (its Authorised IPs protection). The app now says that in plain words and
+  the System page shows "Last send failed" until a send works. Recommended:
+  keep blocking on and allow the cabin's IP (Brevo API keys can do more than
+  send mail); revisit if Starlink's address changes often.

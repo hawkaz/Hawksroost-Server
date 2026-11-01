@@ -43,8 +43,9 @@
 
 		const email = find('Email');
 		const google = find('Google sign-in');
+		const emailWord = !email ? '' : email.ok ? 'Email on' : email.detail.startsWith('Not set up') ? 'No email' : 'Email is failing';
 		out['/admin/sign-in'] = email
-			? { text: [email.ok ? 'Email on' : 'No email', google?.ok ? 'Google on' : ''].filter(Boolean).join(' · '), tone: '' }
+			? { text: [emailWord, google?.ok ? 'Google on' : ''].filter(Boolean).join(' · '), tone: emailWord === 'Email is failing' ? 'warn' : '' }
 			: { text: '', tone: '' };
 
 		const sys = ['Disk', 'Collector', 'Video server', 'Backup'].map(find).filter(Boolean) as Item[];

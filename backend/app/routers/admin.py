@@ -297,7 +297,13 @@ async def health(db: Session = Depends(get_db)):
         ok = bool(b and _age_s(b.updated_at) < 36 * 3600 and b.value.get("ok"))
         add("Backup", ok, b.value.get("detail", "") if b else "No backup yet", b.updated_at if b else None)
 
-    add("Email", mailer.is_configured(db), "Set up" if mailer.is_configured(db) else "Not set up (optional)")
+    if mailer.is_configured(db):
+        last = state.get_row(db, "email_last")
+        ok = not last or last.value.get("ok", True)
+        add("Email", ok, "Set up" if ok else f"Last send failed: {last.value.get('detail')}",
+            last.updated_at if last else None)
+    else:
+        add("Email", False, "Not set up (optional)")
     g = settings_store.get(db, "google")
     add("Google sign-in", bool(g["enabled"] and g["client_id"]), "Set up" if g["enabled"] else "Not set up (optional)")
     return {"version": config.APP_VERSION, "items": items}

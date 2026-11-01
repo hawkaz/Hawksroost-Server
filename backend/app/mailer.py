@@ -11,7 +11,7 @@ import re
 import httpx
 from sqlalchemy.orm import Session
 
-from . import settings_store
+from . import settings_store, state
 
 BREVO_URL = "https://api.brevo.com/v3/smtp/email"
 TRANSPORT: httpx.AsyncBaseTransport | None = None  # tests swap in a mock
@@ -40,6 +40,15 @@ def _html(text: str) -> str:
 async def send(db: Session, to: str, subject: str, body: str) -> None:
     if not is_configured(db):
         raise EmailNotConfigured()
+    try:
+        await _send(db, to, subject, body)
+    except EmailFailed as e:
+        state.put(db, "email_last", {"ok": False, "detail": str(e)})   # shown on the System page
+        raise
+    state.put(db, "email_last", {"ok": True})
+
+
+async def _send(db: Session, to: str, subject: str, body: str) -> None:
     cfg = settings_store.get(db, "email")
     site = settings_store.get(db, "general")["site_name"] or "Hawksroost"
     payload = {
@@ -61,6 +70,12 @@ async def send(db: Session, to: str, subject: str, body: str) -> None:
         detail = r.json().get("message") or r.text
     except ValueError:
         detail = r.text
+    if "unrecognised ip" in detail.lower() or "authorised_ips" in detail.lower():
+        ip = re.search(r"\d{1,3}(?:\.\d{1,3}){3}", detail)
+        raise EmailFailed(
+            f"Brevo blocked the cabin's internet address{f' ({ip.group(0)})' if ip else ''}. Allow it in Brevo: "
+            "Settings → Security → Authorised IPs (Brevo also emails you a link to do it). "
+            "The cabin's address can change, so this may come back.")
     if r.status_code == 401:
         hint = "" if cfg["api_key"].startswith("xkeysib-") else " It should start with xkeysib- (an SMTP key won't work)."
         raise EmailFailed(f"Brevo didn't accept the API key: {detail}.{hint}")
