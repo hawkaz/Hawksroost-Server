@@ -1,4 +1,5 @@
 """Admin: people, invites, integration settings, health."""
+import asyncio
 import logging
 import shutil
 from datetime import timedelta
@@ -14,6 +15,7 @@ from ..db import get_db
 from ..deps import admin
 from ..models import FAMILY_COLORS, ROLES, AccessRequest, AuthSession, Camera, Invite, RadioRecording, User
 from ..security import hash_token, new_token
+from ..services import radio_config, radio_live
 from ..timeutil import iso, utcnow
 from ..web import base_url
 from .auth import google_redirect_uri, make_reset_link
@@ -180,6 +182,10 @@ def put_settings(section: str, body: dict, request: Request, db: Session = Depen
         raise HTTPException(422, str(e))
     except (TypeError, ValueError):
         raise HTTPException(400, "Check the values and try again.")
+    if section == "radio":
+        # The volume boost and the on/off switch live in the recorder's config: rewrite it
+        # (only a real change restarts the recorder).
+        radio_config.apply(db)
     return get_settings(request, db)[section]
 
 
@@ -293,6 +299,16 @@ async def health(db: Session = Depends(get_db)):
     if settings_store.get(db, "radio")["enabled"]:
         last = db.scalar(select(func.max(RadioRecording.started_at)))
         add("Radio recorder", last is not None, "Recording" if last else "No recordings yet", last)
+        plan = state.get(db, "radio_plan") or {"devices": []}
+        want = {d["mount"] for d in plan["devices"] if d.get("mount") and d["mode"] != "off"}
+        if want:
+            up = await asyncio.to_thread(radio_live.mounts)
+            if up is None:
+                add("Live listening", False, "The live-listening server (Icecast) isn't answering")
+            elif want <= up:
+                add("Live listening", True, "Streaming")
+            else:
+                add("Live listening", False, "Icecast is running, but the recorder isn't sending to it")
 
     b = state.get_row(db, "backup")
     if settings_store.get(db, "backup")["enabled"]:

@@ -1,8 +1,9 @@
 """Radio: scanner status, recordings, keep, incidents. Admin: dongles and channels."""
+import re
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,7 +14,7 @@ from .. import config, settings_store, state
 from ..db import get_db
 from ..deps import admin, member, viewer
 from ..models import RadioChannel, RadioDevice, RadioIncident, RadioRecording, User
-from ..services import radio_config, radio_files
+from ..services import radio_config, radio_files, radio_live, radio_stats
 from ..timeutil import LOCAL_TZ, iso, utcnow
 from ..web import file_name
 
@@ -76,10 +77,13 @@ def status(db: Session = Depends(get_db), _: User = Depends(viewer)):
     plan = state.get(db, "radio_plan") or {"devices": []}
     last = db.scalar(select(RadioRecording).order_by(RadioRecording.started_at.desc()).limit(1))
     open_inc = db.scalars(select(RadioIncident).where(RadioIncident.ended_at.is_(None))).all()
+    up = radio_live.mounts() if cfg["enabled"] else None   # live streams Icecast has now
     return {
         "enabled": cfg["enabled"],
         "active": [{**a, "since": iso(a["since"])} for a in radio_files.active.values()],
-        "live": [{"device_id": d["id"], "name": d["name"], "mode": d["mode"], "url": f"/radio/live/{d['mount']}"}
+        # up: the stream is there now (False: listening can't work; None: couldn't ask Icecast).
+        "live": [{"device_id": d["id"], "name": d["name"], "mode": d["mode"], "url": f"/api/radio/live/{d['mount']}",
+                  "up": None if up is None else d["mount"] in up}
                  for d in plan["devices"] if d.get("mount") and d["mode"] != "off"],
         "last_recording_at": iso(last.started_at) if last else None,
         "incidents": [{"id": i.id, "label": i.label, "started_at": iso(i.started_at), "tx_count": i.tx_count}
@@ -152,6 +156,31 @@ def recordings(channel_id: int | None = None, group: str | None = None, day: dat
     return [_rec(r, groups) for r in rows]
 
 
+@router.get("/api/radio/live/{mount}")
+async def live(mount: str, _: User = Depends(viewer)):
+    """A dongle's live sound: a few seconds of silence first so players start at once
+    (see services/radio_live.py), then the recorder's stream from Icecast."""
+    if not re.fullmatch(r"dev\d{1,4}", mount):
+        raise HTTPException(404)
+    opened = await radio_live.open_stream(mount)
+    if opened is None:
+        raise HTTPException(503, "Live listening isn't running right now.")
+    client, resp = opened
+    lead_in = radio_live.preroll()
+
+    async def body():
+        try:
+            yield lead_in
+            async for chunk in resp.aiter_raw():
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return StreamingResponse(body(), media_type="audio/mpeg",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
 @router.get("/api/radio/recordings/{rec_id}/audio")
 def audio(rec_id: int, download: bool = False, db: Session = Depends(get_db), _: User = Depends(viewer)):
     r = db.get(RadioRecording, rec_id)
@@ -214,12 +243,20 @@ def _dev(d: RadioDevice) -> dict:
 
 @router.get("/api/admin/radio", dependencies=[Depends(admin)])
 def admin_radio(db: Session = Depends(get_db)):
+    channels = db.scalars(select(RadioChannel).order_by(RadioChannel.group, RadioChannel.sort, RadioChannel.freq_mhz)).all()
     return {
         "devices": [_dev(d) for d in db.scalars(select(RadioDevice).order_by(RadioDevice.id))],
-        "channels": [_chan(c) for c in db.scalars(select(RadioChannel).order_by(
-            RadioChannel.group, RadioChannel.sort, RadioChannel.freq_mhz))],
+        "channels": [_chan(c) for c in channels],
         "plan": state.get(db, "radio_plan"),
+        # What the recorder has heard on each channel (from its stats file) since counting started.
+        "heard": radio_stats.heard(db, channels),
     }
+
+
+@router.post("/api/admin/radio/heard/reset", dependencies=[Depends(admin)])
+def reset_heard(db: Session = Depends(get_db)):
+    radio_stats.reset(db)
+    return admin_radio(db)
 
 
 @router.post("/api/admin/radio/devices", status_code=201, dependencies=[Depends(admin)])

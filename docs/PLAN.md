@@ -20,7 +20,7 @@ last entry) is pushed; it takes effect with `scripts/update.sh`. Items marked
 | Weather + Starlink (own pages) | Built; tested with simulated data | [VERIFY] with the real station and dish |
 | Cameras (Reolink, ONVIF, stream URL; live, PTZ, presets, recordings, clips, pictures, alerts, siren, light) | Built on drivers; clip cutting tested with a generated video | Live view, presets: yes. [VERIFY]: recordings playback, clips, push events, siren, light |
 | Argus | Skipped (decision) | — |
-| Radio (calls, live listening, tuning) | Built; Mormon Lake list in docs/RADIO.md | Recording: yes. [VERIFY]: live listening reconnecting after a retune |
+| Radio (calls, live listening, tuning) | Built; Mormon Lake list in docs/RADIO.md | Recording: yes. Live listening didn't start (fixed 2026-11-02, see build log). [VERIFY]: live listening on an iPhone; why fire channels are rarely recorded (Admin → Radio now shows what each channel is heard) |
 
 ## Decisions
 
@@ -181,7 +181,7 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
                                   │  Starlink public IP → own router → TCP 80/443
 ┌──────────────── Dell Latitude · Debian · Docker Compose ─────────────────────┐
 │  caddy (host network, Let's Encrypt) ──► web :8080 (nginx: app files;        │
-│        /api → api; /video → go2rtc; /radio/live → icecast; session guard)    │
+│        /api → api (live radio too, via icecast); /video → go2rtc; guard)      │
 │  api (FastAPI, 1 worker): auth, roles, push, calendar, lists, cameras,       │
 │       clips (ffmpeg), radio indexer, nightly backup ── SQLite in data/       │
 │  collector (host network): Tempest UDP 50222, Starlink gRPC                  │
@@ -293,3 +293,26 @@ off; add an SSH key but keep password login. All in `scripts/server-prep.sh`.
     44 px tap targets everywhere, notch-safe edges on tablets.
   - 72 backend tests pass (new: migrations match the models, push headers,
     settings limits, clip API, camera reload race, Starlink merge).
+- 2026-11-02 — Radio, after Chris: almost every call was the Sheriff, the voices
+  were very quiet, and Listen live never connected.
+  - **Listen live:** reproduced here with Icecast, nginx and a stand-in for the
+    recorder's stream. A quiet scanner sends under 0.5 KB/s, and Chromium waits for
+    about 32 KB before it plays: after 90 s it still hadn't started. Icecast's own
+    intro file only cut that to ~6 s (it sends the file slowly). Now the app serves
+    live listening itself (`/api/radio/live/…`): 5 s of silence at once, then the
+    stream. Measured: sound in 2.3–2.5 s on a silent channel, ~5 s behind live. The
+    Radio page and Admin → System say when Icecast or the recorder's stream is down.
+    `scripts/radio-check.sh` checks it on the laptop.
+  - **Quiet voices:** the recorder's FM output peaks at about a third of full scale
+    for narrowband radios, and its MP3 encoder cut speech above 2.5 kHz. Now: voice
+    band 300–3,400 Hz, FM boost (default ×3, Admin → Radio), and every call levelled
+    to the same loudness (ffmpeg `loudnorm`; `dynaudnorm` and `speechnorm` barely
+    lifted 3-second calls). Older calls are levelled once in the background. All
+    checked against the recorder's v5.2.0 source; configs load in the real image.
+  - **Mostly Sheriff:** can't tell from here whether the fire channels are quiet,
+    blocked by a wrong tone, too weak at the cabin, or missed while the scanner sits
+    on the busy Sheriff channel. The recorder now reports per-frequency activity,
+    tone matches and levels (its stats file); Admin → Radio shows it per channel with
+    plain warnings. Each channel's own squelch is used in scan mode (was the lowest).
+  - 78 backend tests pass.
+

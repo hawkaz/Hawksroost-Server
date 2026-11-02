@@ -3,6 +3,7 @@ import tempfile
 
 os.environ["HAWK_DATA_DIR"] = tempfile.mkdtemp(prefix="hawk-test-")
 os.environ["HAWK_GO2RTC_URL"] = "http://127.0.0.1:9"
+os.environ["HAWK_ICECAST_URL"] = "http://127.0.0.1:9"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

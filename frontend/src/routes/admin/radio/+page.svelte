@@ -5,17 +5,21 @@
 	import Switch from '#lib/components/Switch.svelte';
 	import SettingsForm, { type Field } from '#lib/components/admin/SettingsForm.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
+	import { dayTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 
 	interface Device { id: number; name: string; serial: string | null; index: number; gain: number; correction: number; mode: string; centerfreq: number | null; live_stream: boolean; enabled: boolean }
 	interface Channel { id: number; device_id: number | null; group: string; label: string; freq_mhz: number; modulation: string; squelch_snr: number | null; ctcss: number | null; incident: boolean; enabled: boolean; sort: number }
 	interface Plan { changed?: boolean; errors: string[]; devices: { id: number; name: string; mode: string; centerfreq: number | null; channels: number; mount: string | null }[] }
+	interface Heard { opens: number; on_air_s: number; flappy: number; tone: number; no_tone: number; noise_dbfs: number | null; peak_dbfs: number | null }
+	interface HeardAll { since: string | null; updated_at: string | null; channels: Record<string, Heard | null> }
 
 	let settings = $state<Record<string, unknown> | null>(null);
 	let devices = $state<Device[]>([]);
 	let channels = $state<Channel[]>([]);
 	let plan = $state<Plan | null>(null);
+	let heard = $state<HeardAll | null>(null);
 
 	let devOpen = $state(false);
 	let dform = $state<Device>({ id: 0, name: '', serial: '', index: 0, gain: 32, correction: 0, mode: 'auto', centerfreq: null, live_stream: true, enabled: true });
@@ -26,10 +30,11 @@
 		try {
 			const all = await api.get<Record<string, Record<string, unknown>>>('/api/admin/settings');
 			settings = all.radio;
-			const r = await api.get<{ devices: Device[]; channels: Channel[]; plan: Plan | null }>('/api/admin/radio');
+			const r = await api.get<{ devices: Device[]; channels: Channel[]; plan: Plan | null; heard: HeardAll }>('/api/admin/radio');
 			devices = r.devices;
 			channels = r.channels;
 			plan = r.plan;
+			heard = r.heard;
 		} catch (e) {
 			toast.error(e);
 		}
@@ -118,6 +123,34 @@
 		}
 	}
 
+	// --- What the scanner has heard on each channel (the recorder's own counts) ---
+	async function resetHeard() {
+		if (!confirm('Start counting again from now?')) return;
+		try {
+			heard = (await api.post<{ heard: HeardAll }>('/api/admin/radio/heard/reset')).heard;
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+	function onAir(s: number) {
+		if (s < 60) return 'under a minute';
+		const h = Math.floor(s / 3600);
+		const m = Math.round((s % 3600) / 60);
+		return h ? `${h} h ${m} min` : `${m} min`;
+	}
+	/** One line per channel, plus a warning when the counts point at a setting. */
+	function heardText(c: Channel): { text: string; warn: string } | null {
+		const h = heard?.channels[String(c.id)];
+		if (!heard?.since || !c.enabled) return null;
+		if (!h || h.opens === 0) return { text: `Not heard since ${dayTime(heard.since)}`, warn: '' };
+		let warn = '';
+		if (c.ctcss && h.no_tone >= 20 && h.no_tone > 3 * h.tone)
+			warn = 'Often heard without its tone, so those calls aren’t saved. The tone may be wrong: try clearing it.';
+		else if (h.flappy >= 5 && h.flappy * 2 >= h.opens) warn = 'The signal comes and goes here: it’s weak at the cabin.';
+		const level = h.peak_dbfs != null && h.noise_dbfs != null ? ` · strongest ${Math.round(h.peak_dbfs)} dBFS, noise ${Math.round(h.noise_dbfs)}` : '';
+		return { text: `Heard ${h.opens} ${h.opens === 1 ? 'time' : 'times'} · ${onAir(h.on_air_s)} on the air${level}`, warn };
+	}
+
 	const F: Field[] = [
 		{ key: 'enabled', label: 'Radio scanner on', type: 'checkbox' },
 		{ key: 'join_gap_s', label: 'Join replies within this many seconds into one call', type: 'number', help: 'A transmission that follows the last one on the same channel within this time is added to the same recording, so a back-and-forth is one call. 0 saves every transmission on its own.' },
@@ -126,7 +159,8 @@
 		{ key: 'max_age_days', label: 'Keep calls for (days)', type: 'number' },
 		{ key: 'incident_tx_count', label: 'Busy alert: this many calls…', type: 'number' },
 		{ key: 'incident_window_min', label: '…within this many minutes', type: 'number' },
-		{ key: 'incident_cooldown_min', label: 'Busy ends after this many quiet minutes', type: 'number' }
+		{ key: 'incident_cooldown_min', label: 'Busy ends after this many quiet minutes', type: 'number' },
+		{ key: 'volume_boost', label: 'Volume boost for FM channels (1–6)', type: 'number', help: 'Makes voices louder in live listening and new calls. 3 suits most radios; if loud voices crackle, lower it. Saved calls are also levelled to an even volume.' }
 	];
 	const devName = (id: number | null) => devices.find((d) => d.id === id)?.name ?? 'No dongle';
 	// Channels by group, groups in the order they first appear.
@@ -172,10 +206,18 @@
 					<button class="btn secondary" onclick={() => editChannel()}><Plus size={18} strokeWidth={1.75} />Add</button>
 				</div>
 			</div>
+			{#if channels.length}
+				<p class="small muted">
+					{#if heard?.since}What the scanner has heard since <span class="data">{dayTime(heard.since)}</span>.
+						<button class="btn text" onclick={resetHeard}>Start counting again</button>
+					{:else}What the scanner hears on each channel shows here a few minutes after it starts.{/if}
+				</p>
+			{/if}
 			{#each byGroup as [g, list] (g)}
 				<h3 class="group">{g} <span class="small muted">{list.filter((c) => c.enabled).length} of {list.length} on</span></h3>
 				<ul class="list chans">
 					{#each list as c (c.id)}
+						{@const hd = heardText(c)}
 						<li>
 							<Switch checked={c.enabled} label={`${c.label} on`} onchange={(on) => quickToggle(c, on)} />
 							<div class="grow">
@@ -183,6 +225,8 @@
 								<div class="small muted">
 									<span class="data">{c.freq_mhz.toFixed(4)}</span>{c.ctcss ? ` · tone ${c.ctcss}` : ''}{c.modulation === 'am' ? ' · AM' : ''}{devices.length > 1 ? ` · ${devName(c.device_id)}` : ''}
 								</div>
+								{#if hd}<div class="small heard">{hd.text}</div>{/if}
+								{#if hd?.warn}<div class="small warn-text">{hd.warn}</div>{/if}
 							</div>
 							<button class="btn text" onclick={() => editChannel(c)}>Edit</button>
 						</li>
@@ -255,6 +299,12 @@
 	}
 	.chans .grow {
 		min-width: 0;
+	}
+	.heard {
+		color: var(--text-muted);
+	}
+	.warn-text {
+		color: var(--warn);
 	}
 	.chans .name {
 		overflow: hidden;

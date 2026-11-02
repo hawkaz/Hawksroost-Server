@@ -217,6 +217,12 @@ cd /opt/hawksroost && docker compose start api collector
 
 How calls are saved, live listening and tuning to one frequency: [RADIO.md](RADIO.md#in-the-app). Hardware notes are there too.
 
+If live listening or recording misbehaves, this read-only check says what's running and what the recorder reports (send Claude the output):
+
+```bash
+bash /opt/hawksroost/scripts/radio-check.sh
+```
+
 ## Useful
 
 | What | Command |

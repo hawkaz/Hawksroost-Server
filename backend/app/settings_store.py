@@ -50,6 +50,7 @@ SECTIONS: dict[str, dict[str, Any]] = {
         "incident_cooldown_min": 15,
         "min_call_s": 3,           # calls shorter than this aren't saved (0 = keep everything)
         "join_gap_s": 10,          # transmissions this close together on one channel become one call
+        "volume_boost": 3,         # FM sound × this in the recorder (1 = as received); see radio_config
     },
     "backup": {
         "enabled": True,
@@ -86,6 +87,7 @@ LIMITS: dict[str, dict[str, tuple[int, int, str]]] = {
         "incident_tx_count": (2, 500, "The busy alert count"),
         "incident_window_min": (1, 240, "The busy alert minutes"),
         "incident_cooldown_min": (1, 1440, "The quiet minutes"),
+        "volume_boost": (1, 6, "The volume boost"),
     },
     "backup": {"hour": (0, 23, "The backup hour"), "keep_days": (1, 365, "Days of backups to keep")},
 }

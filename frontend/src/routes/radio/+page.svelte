@@ -6,7 +6,8 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 
-	interface Live { device_id: number; name: string; mode: string; url: string }
+	/** up: the stream is there now; false = listening can't work; null = couldn't check. */
+	interface Live { device_id: number; name: string; mode: string; url: string; up: boolean | null }
 	interface Status {
 		enabled: boolean;
 		active: { channel_id: number | null; label: string; group: string | null; freq_mhz: number | null; since: string }[];
@@ -267,11 +268,14 @@
 						<div class="row wrap">
 							{#each status.live as l (l.url)}
 								{@const on = playing?.kind === 'live' && playing.live.url === l.url}
-								<button class="btn {on ? '' : 'secondary'}" aria-pressed={on} onclick={() => listenLive(l)}>
+								<button class="btn {on ? '' : 'secondary'}" aria-pressed={on} disabled={l.up === false && !on} onclick={() => listenLive(l)}>
 									{#if on}<Square size={16} strokeWidth={1.75} />Stop listening{:else}<Headphones size={18} strokeWidth={1.75} />Listen live{status.live.length > 1 ? ` · ${l.name}` : ''}{/if}
 								</button>
 							{/each}
 						</div>
+						{#if status.live.some((l) => l.up === false)}
+							<p class="small muted">Live listening isn’t running right now{session.can('admin') ? '. Admin → System shows why.' : '. An admin can look into it.'}</p>
+						{/if}
 					{/if}
 				</section>
 				<section class="card stack tuning">

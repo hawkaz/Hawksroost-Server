@@ -14,14 +14,25 @@ The software side (channels, scan settings, retention) is set in the app:
 - **Keep and delete.** Members can star a call to keep it; kept calls are never
   cleaned up. Admins can delete calls. Otherwise the oldest go first when the
   storage limit or the days limit is reached.
-- **Listen live** plays the scanner as it happens, about 4 seconds behind. It
-  starts only when you tap (never on its own).
+- **Listen live** plays the scanner about 5 seconds behind, starting a couple of
+  seconds after you tap (never on its own). The app sends 5 seconds of silence first:
+  browsers won't start an MP3 stream until they've buffered about 32 KB, and the
+  scanner's stream is tiny while nobody talks, so without it starting took a minute
+  or more.
+- **Sound.** The recorder keeps the voice band (300–3,400 Hz: less muffled, no tone
+  hum) and boosts FM channels (Admin → Radio, "Volume boost", default ×3). Each saved
+  call is then levelled to the same loudness, so a weak unit and a loud dispatcher
+  sound alike. Calls saved before this were levelled once, in the background.
+- **What it heard.** Admin → Radio shows, per channel, how often the scanner heard it
+  and for how long, with a warning when a channel is often heard without its tone
+  (the tone setting may be wrong) or comes and goes (weak signal). Counting starts
+  when the recorder first runs these settings; "Start counting again" resets it.
 - **Tuning.** Members can sit the dongle on one frequency (FM or AM) from the Radio
   page; it goes back to scanning after the time picked (default 1 hour) so fire
   calls aren't missed. Calls on that frequency are recorded like any other.
-- **Restarts.** Tuning (and its return to scanning) and Apply rewrite the recorder's
-  settings, and the recorder restarts for a few seconds. Live listening reconnects
-  by itself.
+- **Restarts.** Tuning (and its return to scanning), Apply, and saving the radio
+  settings rewrite the recorder's settings when they change, and the recorder restarts
+  for a few seconds. Live listening reconnects by itself.
 - **Busy alerts.** Channels marked for alerts notify people who turned on "When the
   radio gets busy" (Settings) when they pass the busy count within the busy window.
 

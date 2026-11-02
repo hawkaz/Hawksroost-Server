@@ -7,7 +7,9 @@ frequency). The recorder has no "hang time" or minimum-length option
 (checked in v5.2.0), so the app does it:
 
 - Transmissions on the same channel less than `join_gap_s` apart become one
-  call: the parts are joined into a single MP3 (no re-encoding) in `calls/`.
+  call: the parts are joined into a single MP3 in `calls/`, levelled on the way
+  (voice band, then loudness normalisation, so every call plays at about the same
+  level). If levelling fails the call is saved as recorded.
 - A finished call shorter than `min_call_s` is deleted, not saved.
 - A call is finished once its channel has been quiet for `join_gap_s`.
 """
@@ -27,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from .. import config, push, settings_store, state
 from ..db import SessionLocal
+from . import radio_stats
 from ..models import RadioChannel, RadioIncident, RadioRecording, User
 from ..timeutil import utcnow
 
@@ -111,30 +114,92 @@ def group_calls(parts: list[Part], gap_s: float) -> list[list[Part]]:
     return calls
 
 
+# Levelling: speech band, then EBU R128 loudness normalisation to -18 LUFS with a -2 dB
+# peak limit. Tried dynaudnorm and speechnorm too: on 3-second calls they barely lifted
+# quiet audio (they ramp in at the edges); loudnorm brings even 0.4 s clips to level.
+# Output like the recorder's: mono 8 kHz MP3, a little more bitrate.
+LEVEL_FILTER = "highpass=f=300,lowpass=f=3400,loudnorm=I=-18:TP=-2:LRA=11"
+LEVEL_ENCODE = ["-ac", "1", "-ar", "8000", "-c:a", "libmp3lame", "-b:a", "24k", "-f", "mp3"]
+
+
+def _ffmpeg(args: list[str]) -> None:
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args], check=True, timeout=300)
+
+
+def _sources(parts: list[Part]) -> tuple[list[str], str | None]:
+    """ffmpeg input arguments for the parts (one file, or a concat list) and the list file to remove."""
+    if len(parts) == 1:
+        return ["-i", str(parts[0].path)], None
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as lst:
+        for p in parts:
+            lst.write(f"file '{p.path.as_posix()}'\n")
+    return ["-f", "concat", "-safe", "0", "-i", lst.name], lst.name
+
+
+def level(src: Path) -> bool:
+    """Level a saved call in place. False (file unchanged) if ffmpeg couldn't."""
+    tmp = src.with_name(src.name + ".part")
+    try:
+        _ffmpeg(["-i", str(src), "-af", LEVEL_FILTER, *LEVEL_ENCODE, str(tmp)])
+        tmp.replace(src)
+        return True
+    except Exception as e:
+        log.warning("radio: couldn't level %s (%s)", src.name, e)
+        tmp.unlink(missing_ok=True)
+        return False
+
+
 def _join(parts: list[Part], out: Path) -> None:
-    """Join MP3 parts without re-encoding. ffmpeg writes a correct length header;
-    if it fails, plain byte-joining still plays (MP3 is a stream of frames)."""
+    """Join a call's parts into one levelled MP3. If that fails, join them as recorded:
+    ffmpeg without re-encoding, or plain bytes (MP3 is a stream of frames)."""
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".part")
-    if len(parts) == 1:
-        shutil.move(parts[0].path, tmp)
-    else:
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as lst:
-            for p in parts:
-                lst.write(f"file '{p.path.as_posix()}'\n")
+    src, lst = _sources(parts)
+    try:
         try:
-            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
-                            "-i", lst.name, "-c", "copy", "-f", "mp3", str(tmp)], check=True, timeout=120)
+            _ffmpeg([*src, "-af", LEVEL_FILTER, *LEVEL_ENCODE, str(tmp)])
         except Exception as e:
-            log.warning("ffmpeg join failed (%s); joining bytes instead", e)
-            with tmp.open("wb") as f:
-                for p in parts:
-                    f.write(p.path.read_bytes())
-        finally:
-            Path(lst.name).unlink(missing_ok=True)
-        for p in parts:
-            p.path.unlink(missing_ok=True)
+            log.warning("radio: couldn't level a call (%s); saving it as recorded", e)
+            if len(parts) == 1:
+                shutil.copyfile(parts[0].path, tmp)
+            else:
+                try:
+                    _ffmpeg([*src, "-c", "copy", "-f", "mp3", str(tmp)])
+                except Exception as e2:
+                    log.warning("ffmpeg join failed (%s); joining bytes instead", e2)
+                    with tmp.open("wb") as f:
+                        for p in parts:
+                            f.write(p.path.read_bytes())
+    finally:
+        if lst:
+            Path(lst).unlink(missing_ok=True)
+    for p in parts:
+        p.path.unlink(missing_ok=True)
     tmp.replace(out)
+
+
+def level_older_calls(db: Session, batch: int = 10) -> int:
+    """Calls saved before levelling existed get levelled once, a few at a time."""
+    s = state.get(db, "radio_levelling")
+    if s is None:   # first run with levelling: everything saved up to now is "older"
+        s = {"until_id": db.scalar(select(func.max(RadioRecording.id))) or 0, "done_id": 0}
+        state.put(db, "radio_levelling", s)
+    if s["done_id"] >= s["until_id"]:
+        return 0
+    rows = db.scalars(select(RadioRecording).where(
+        RadioRecording.id > s["done_id"], RadioRecording.id <= s["until_id"]).order_by(RadioRecording.id).limit(batch)).all()
+    n = 0
+    for r in rows:
+        path = config.RECORDINGS_DIR / r.path
+        if r.path.startswith(f"{CALLS}/") and path.exists() and level(path):
+            r.size_bytes = path.stat().st_size
+            n += 1
+        s["done_id"] = r.id
+    if not rows:
+        s["done_id"] = s["until_id"]
+    db.commit()
+    state.put(db, "radio_levelling", s)
+    return n
 
 
 def process_files(db: Session, now: datetime | None = None) -> list[RadioRecording]:
@@ -298,6 +363,8 @@ def _expire_tuning() -> None:
 def _process_once() -> list[int]:
     """File work (reading, joining with ffmpeg) runs off the event loop."""
     with SessionLocal() as db:
+        radio_stats.update(db)
+        level_older_calls(db)   # before saving new calls: those are levelled as they're joined
         return [r.id for r in process_files(db)]
 
 

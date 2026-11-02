@@ -16,6 +16,7 @@ BRANDING_DIR = DATA_DIR / "branding"
 CLIPS_DIR = DATA_DIR / "clips"
 RECORDINGS_DIR = Path(os.environ.get("HAWK_RECORDINGS_DIR", str(DATA_DIR / "radio" / "recordings")))
 GO2RTC_URL = os.environ.get("HAWK_GO2RTC_URL", "http://go2rtc:1984")
+ICECAST_URL = os.environ.get("HAWK_ICECAST_URL", "http://icecast:8000")   # live radio, on the Docker network
 TZ_NAME = os.environ.get("TZ", "America/Phoenix")
 APP_VERSION = os.environ.get("HAWK_VERSION", "dev")
 
